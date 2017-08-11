@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+# The Mulesoft out-of-the-box "OAuth 2.0 access token enforcement using external provider policy" expects
+# a token validation endpoint and a return map that many OAuth2 servers don't provide in the *undocumented* 
+# format expected (RFC 6749 does not define the validation endpoint implementaiton and Mulesoft doesn't
+# document how they implement it).
+#
+# This custom policy is a replacement for that using the RFC 7662 introspect endpoint to
+# both validate the Access Token and return the valid scopes and other RFC 7662 response values
+# for use downstream in the API implementation. N.B. Whereas the Mulesoft policy only needs the
+# Authorization Token in order to validate and introspect it, this policy additionally needs the Client ID and
+# Secret, since OpenAM will only respond to an introspect that has been validated with Basic Auth
+# using them. This policy also works with WSO2-IS 5.3.0.
+#
+# See https://docs.mulesoft.com/anypoint-studio/v/6/studio-policy-editor and
+# https://docs.mulesoft.com/api-manager/creating-a-policy-walkthrough
+#
+# This policy requires:
+#  - header Authorization: Bearer <access_token>
+#  - parameters client_id and client_secret
+#
+# On success, it adds the following headers to the flow based on the keys in the introspection response.
+#  X-AGW-scope
+#  etc. TBD upon further experimentation.
+#
+# OpenAM endpoints are documented here:
+# https://backstage.forgerock.com/#!/docs/openam/13.5/dev-guide#rest-api-oauth2-client-endpoints
+# WSO2-IS endpoints are documented in the web console, but the introspect endpoint is currently not documented (but works!)
+#
+# The introspect endpoint requires the following:
+#  - method POST
+#  - header Authorization: Basic <HTTPBasicAuth(client_id,client_secret)>
+#  - parameter token=<access_token>
+#
+# This policy has been tested only with OpenAM 14.0 and WSO2-IS 5.3.0 but might not work with other RFC 7662 implementations.
+#
+# Copyright (c) 2016 The Trustees of Columbia University in the City of New York
+# 
+-->
+<policy 
+    xmlns="http://www.mulesoft.org/schema/mule/policy" 
+    xmlns:http="http://www.mulesoft.org/schema/mule/http"
+    xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    policyName="OAuth 2.0 Access Token Introspection Policy"
+    xmlns:mule="http://www.mulesoft.org/schema/mule/core"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:api-platform-gw="http://www.mulesoft.org/schema/mule/api-platform-gw"
+    xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+    xmlns:json="http://www.mulesoft.org/schema/mule/json"
+    xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+    xsi:schemaLocation="http://www.mulesoft.org/schema/mule/policy http://www.mulesoft.org/schema/mule/policy/current/mule-policy.xsd
+                        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+                        http://www.mulesoft.org/schema/mule/api-platform-gw http://www.mulesoft.org/schema/mule/api-platform-gw/current/mule-api-platform-gw.xsd
+                        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+                        http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+                        http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+                        http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
+   <!--  can't get id={{policyId}} to work. Eclipse complains! -->
+    <!--
+        Based on the sample custom policy and the JWT validation policy (https://github.com/mulesoft/api-policies/tree/master/jwt-validation-policy)
+
+        The policy has these configuration parameters (see the YAML file):
+        - OAuthHost,Port,Uri: RFC 7662 introspect endpoint
+        All other RFC 6749 endpoints are defined in the RAML for the given app being protected.
+        It is important that the introspect endpoint be coordinated with them.
+
+        For more information about creating custom policies see:
+        https://docs.mulesoft.com/api-manager/creating-a-policy-walkthrough
+        and
+        https://docs.mulesoft.com/api-manager/applying-custom-policies
+    -->
+
+    <pointcut>
+        <api-platform-gw:api-pointcut apiName="{{ apiName }}" apiVersion="{{ apiVersionName }}"/>
+    </pointcut>
+    
+	<!-- XXX TODO: Add http vs. https, try to parse the introspectUri into components so the user of this policy doesn't have to. -->
+    <!-- This works with {{OAuthPort}} but Eclipse complains that it's not an integer. -->
+    
+    <http:request-config name="http-request-config" protocol="{{OAuthProto}}" host="{{OAuthHost}}" port="{{OAuthPort}}" doc:name="HTTP Request Configuration">
+		<tls:context>
+			<!-- use this while {{logLevel}}ging only! In production our cert will be signed by a well-known CA -->
+            <tls:trust-store insecure="{{insecure}}"/>
+        </tls:context>
+	</http:request-config>
+
+ 	<!-- Response messages in case of rejecting a message -->
+ 	<!-- Various syntax errors (missing or malformed Authorization header, client_id, client_secret query parameters -->
+    <mule:processor-chain xmlns:mule="http://www.mulesoft.org/schema/mule/core" name="authorizationHeaderViolation">
+		<mule:logger message="Policy {{ policyId }} filtered the message #[message.getId()] based on OAuth 2.0 Authorization header validation" level="INFO" />     
+		<mule:set-property propertyName="http.status" value="403"/>    
+		<mule:set-property propertyName="Content-Type" value="application/json"/>
+		<mule:set-payload value='{ "error": "invalid_authorization", "error_description" : "Policy {{ policyId }}: Authorization header is missing or not of type Bearer access_token."}'/>
+    </mule:processor-chain>
+
+    <mule:processor-chain xmlns:mule="http://www.mulesoft.org/schema/mule/core" name="clientParameterViolation">
+		<mule:logger message="Policy {{ policyId }} filtered the message #[message.getId()] based on OAuth 2.0 client parameter validation" level="INFO" />     
+		<mule:set-property propertyName="http.status" value="403"/>    
+		<mule:set-property propertyName="Content-Type" value="application/json"/>
+		<mule:set-payload value='{ "error": "invalid_client", "error_description" : "Policy {{ policyId }}: The message does not contain the client_id and/or client_secret parameters"}'/>
+    </mule:processor-chain> 
+    
+    <!-- This error is a pass-through of a failed call to the introspect endpoint. -->
+    <mule:processor-chain xmlns:mule="http://www.mulesoft.org/schema/mule/core" name="introspectViolation">
+		<mule:logger message="Policy {{ policyId }} filtered the message #[message.getId()] based on OAuth 2.0 introspect failure #[flowVars.introStatus]" level="INFO" />     
+		<mule:set-property propertyName="http.status" value="#[flowVars.introStatus]"/>    
+		<mule:set-property propertyName="Content-Type" value="application/json"/>
+		<mule:set-payload value="#[flowVars.introPayload]"/>
+    </mule:processor-chain>       
+
+    <!-- Scopes from the introspected token don't match those configured by the policy -->      
+    <mule:processor-chain xmlns:mule="http://www.mulesoft.org/schema/mule/core" name="invalidScopeViolation">
+		<mule:logger message="Policy {{ policyId }} filtered the message #[message.getId()] based on OAuth 2.0 scope validation" level="INFO" />     
+		<mule:set-property propertyName="http.status" value="403"/>    
+		<mule:set-property propertyName="Content-Type" value="application/json"/>
+		<mule:set-payload value='{ "error": "invalid_scope", "error_description" : "Policy {{ policyId }}: Access Token does not have the required scope(s): {{scopes}}."}'/>
+    </mule:processor-chain>
+
+    <before>
+		<!-- Validate headers and parameters -->
+        <mule:logger message="Policy {{ policyId }} applying 'message.inboundProperties.'Authorization' filter" level="{{logLevel}}" />        
+        <mule:message-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" onUnaccepted="authorizationHeaderViolation">
+			<mule:expression-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" expression="#[message.inboundProperties.'Authorization' != null]" name="AuthorizationHeaderFilter"/>
+        </mule:message-filter>
+        <mule:logger message="Policy {{ policyId }} applying 'message.inboundProperties.'Authorization'.startsWith('Bearer ')' filter" level="{{logLevel}}" />        
+        <mule:message-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" onUnaccepted="authorizationHeaderViolation">
+			<mule:expression-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" expression="#[message.inboundProperties.'Authorization'.startsWith('Bearer ')]" name="AuthorizationHeaderFormatFilter"/>
+        </mule:message-filter>
+        <mule:set-variable variableName="access_token" value="#[message.inboundProperties.'Authorization'.substring(message.inboundProperties.'Authorization'.indexOf(' ') + 1)]" />
+        <mule:logger message="Access token is #[flowVars.'access_token']" level="{{logLevel}}" />
+        <mule:logger message="Policy {{ policyId }} applying client_id != null filter" level="{{logLevel}}" />        
+        <mule:message-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" onUnaccepted="clientParameterViolation">
+			<mule:expression-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" expression="#[message.inboundProperties.'http.query.params'.client_id != null]" name="clientIdFilter"/>
+        </mule:message-filter>
+        <mule:set-variable variableName="client_id" value="#[message.inboundProperties.'http.query.params'.client_id]" />
+        <mule:logger message="Policy {{ policyId }} applying client_secret != null filter" level="{{logLevel}}" />                
+        <mule:message-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" onUnaccepted="clientParameterViolation">
+			<mule:expression-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" expression="#[message.inboundProperties.'http.query.params'.client_secret != null]" name="clientSecretFilter"/>
+        </mule:message-filter>
+        <!-- The introspect authorization credentials can come either from the client app or policy configuration if non-null. Set it accordingly. -->
+     	<mule:choice>
+      		<mule:when expression="#['{{introspectClientId}}' != '']">
+ 				<mule:set-variable variableName="authn" value="{{introspectClientId}}:{{introspectClientSecret}}" />	
+        	</mule:when>
+        	<mule:otherwise>
+           	    <mule:set-variable variableName="authn" value="#[message.inboundProperties.'http.query.params'.client_id]:#[message.inboundProperties.'http.query.params'.client_secret]" />
+        	</mule:otherwise>
+       	</mule:choice>
+        <mule:set-variable variableName="Authorization" value="Basic #[java.util.Base64.getEncoder().encodeToString(flowVars.'authn'.getBytes())]" />
+
+        <mule:logger message="Policy {{ policyId }} access_token=#[flowVars.'access_token'] authn=#[flowVars.'authn'] Authorization=#[flowVars.'Authorization']" level="{{logLevel}}" />
+        <!-- now actually do something useful 
+        	Invoke the introspect endpoint with HTTP Basc Auth(client_id:client_secret) for the Authorization header
+        	and query parameter 'token=<access_token>'   
+        -->
+        <mule:logger message="Policy {{ policyId }} invoking introspectUri: {{OAuthHost}}:{{OAuthPort}}/{{introspectPath}}" level="{{logLevel}}" />
+        <!-- See https://forums.mulesoft.com/questions/2466/is-it-possible-to-call-a-rest-service-from-custom-policy-of-anypoint-platform.html -->
+        <!-- save the original payload (usually null for a GET) -->
+		<mule:logger message="PAYLOAD BEFORE: #[payload]" level="{{logLevel}}"/>
+		<mule:enricher target="flowVars.introspect_response">
+       		<mule:processor-chain> 
+       		    <http:request config-ref="http-request-config" path="{{introspectPath}}" method="POST">
+     		        <http:request-builder>
+	          		    <http:query-param paramName="token" value="#[flowVars.'access_token']" />
+   		                <http:header headerName="Authorization" value="#[flowVars.'Authorization']" /> 
+       		    	</http:request-builder>	
+       		    	<http:success-status-code-validator values="200..699"/>
+       		    </http:request>
+       		    <mule:object-to-string-transformer doc:name="Object to String"/>
+       		    <mule:logger message="INTROSPECT payload: #[payload] status=#[message.inboundProperties['http.status']] reason=#[message.inboundProperties['http.reason']]" level="{{logLevel}}" />
+       		    <mule:set-payload value="#[message.inboundProperties.'http.status']:#[payload]" />
+     		</mule:processor-chain>
+		</mule:enricher>
+		<!-- XXX TODO: try using separate <enrich> elements above instead of breaking on ':' -->
+		<mule:set-variable variableName="introStatus" value="#[flowVars.introspect_response.substring(0,flowVars.introspect_response.indexOf(':'))]"/>
+		<mule:set-variable variableName="introPayload" value="#[flowVars.introspect_response.substring(flowVars.introspect_response.indexOf(':')+1)]"/>
+		<mule:logger message="PAYLOAD AFTER #[payload] introStatus=#[flowVars.introStatus]]" level="{{logLevel}}"/>
+   		<mule:message-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" onUnaccepted="introspectViolation">
+			<mule:expression-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" expression="#[flowVars.introStatus == 200]"/>
+		</mule:message-filter>
+		<!-- set X-AGW-* headers based on observed (undocumented) behavior of Mulesoft's OAuth 2.0 validation policy -->
+	    <mule:set-variable variableName="_agwTokenContext" value="#[flowVars.introPayload]" />
+		<!-- see https://forums.mulesoft.com/questions/49326/how-do-i-convert-a-json-string-flowvar-to-a-javaut.html -->
+		<mule:enricher target="flowVars._agwUser" doc:name="Message Enricher">
+		     <mule:expression-transformer expression="#[new com.fasterxml.jackson.databind.ObjectMapper().readValue(flowVars._agwTokenContext, java.util.HashMap)]" doc:name="Expression"/>
+		</mule:enricher>   	
+		<mule:logger message="_agw_User: #[flowVars._agwUser]" level="{{logLevel}}"/>
+		<!-- I couldn't figure out how to do this in "native" Mule-speak. Python is my hammer:-->
+	    <scripting:component>
+             <scripting:script engine="jython"><![CDATA[
+# Set an X-AGW- header for each key and value present in the map returned by the introspect endpoint
+import json
+r = flowVars['_agwTokenContext']
+map=json.loads(r)
+for key in map:
+  #print("Key: %s type: %s Value: %s"%(key,type(key),map[key]))
+  k = 'X-AGW-'+key  # apparently can't pass an immutable string as the key
+  message.setOutboundProperty(k,map[key])
+if 'user_id' in map: # make X-AGW-userid per OpenAM/PingFederate documentation
+  k = 'X-AGW-userid'
+  message.setOutboundProperty(k,map['user_id'])  # OpenAM
+elif 'username' in map:
+  k = 'X-AGW-userid'
+  message.setOutboundProperty(k,map['username']) # WSO2-IS
+# If there is a scopes policy configuration parameter, make sure all the scopes listed are found
+# in the scopes in map['scope']. If not return a 403 invalid scope error.
+expected_scopes="{{scopes}}" # the mustachioed scopes get replaced with configured scopes.
+flowVars['pyStatus'] = 200
+flowVars['pyPayload'] = None
+for s in expected_scopes.split(' '):
+  if 'scope' not in map or s not in map['scope']:
+    #print("scope %s is missing from the token scopes."%s)
+    flowVars['pyPayload'] = "403,"+json.dumps({"error": "invalid_scope", "error_description": "required scope %s is missing"%s})
+    flowVars['pyStatus'] = 403
+    break
+result=payload
+]]>
+        	</scripting:script>
+        </scripting:component>
+		<mule:logger message="python script status=#[flowVars.pyStatus] payload=#[flowVars.pyPayload]" level="{{logLevel}}"/>
+   		<mule:message-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" onUnaccepted="invalidScopeViolation">
+			<mule:expression-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" expression="#[flowVars.pyStatus == 200]"/>
+		</mule:message-filter>
+
+		<!-- XXX TODO: cache successful token validation, etc? -->
+
+
+        <!-- clean up variables, properties, etc. not needed by downstream flow -->
+		<mule:logger message="PAYLOAD RESET #[payload]" level="{{logLevel}}"/>
+		       
+    </before>
+    
+    <!-- The following provides a custom trait to the RAML of the API if it uses APIkit. Otherwise it is ignored. -->
+	<!-- Copied this from the generic OAuth2 policy -->
+	<!-- XXX I'm not sure if this becomes the RAML snipped in the API policy manager... Will need to see. -->
+	<!-- 
+	<raml-security-scheme id="oauth_2_0_introspect"><![CDATA[
+description: |
+  This API supports OAuth 2.0 for authenticating all API requests. 
+  Authorization tokens are validated using the RFC 7662 introspect endpoint.
+  Besides checking that the token is still valid, the following scopes (if any) must all be
+  in place for the Access Token: {{scopes}}
+type: OAuth 2.0
+describedBy:
+  headers:
+    Authorization:
+      description: |
+         Used to send a valid OAuth 2 access token. Do not use with the "access_token" query
+         string parameter.
+      type: string
+  queryParameters:
+    access_token:
+      description: |
+         Used to send a valid OAuth 2 access token. Do not use together with the "Authorization"
+         header
+      type: string
+  responses:
+    401:
+      description: |
+        Bad or expired token. This can happen if the user or the API revoked or expired an
+        access token. To fix, you should re-authenticate the user.
+    403:
+      description: |
+        Bad OAuth request (wrong consumer key, bad nonce, expired timestamp...). Unfortunately,
+        re-authenticating the user won't help here.
+settings:
+  authorizationUri: {{authorizationUri}}
+  accessTokenUri: {{accessTokenUri}}
+  authorizationGrants: [ INSERT_OAUTH2_AUTHORIZATION_GRANTS ]
+  scopes: [ INSERT_OAUTH2_REQUIRED_SCOPES ]
+      ]]></raml-security-scheme>
+ -->   
+    <after>
+        <mule:set-property propertyName="Custom-Header" value="Oauth 2.0 Introspect Policy" />
+        <!-- remove flowVars, etc. here? -->
+    </after>
+
+</policy>

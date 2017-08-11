@@ -1,0 +1,241 @@
+# The Mulesoft out-of-the-box "OAuth 2.0 access token enforcement using external provider policy" expects
+# a token validation endpoint and a return map that many OAuth2 servers don't provide in the *undocumented* 
+# format expected (RFC 6749 does not define the validation endpoint implementaiton and Mulesoft doesn't
+# document how they implement it).
+#
+# This custom policy is a replacement for that using the RFC 7662 introspect endpoint to
+# both validate the Access Token and return the valid scopes and other RFC 7662 response values
+# for use downstream in the API implementation. N.B. Whereas the Mulesoft policy only needs the
+# Authorization Token in order to validate and introspect it, this policy additionally needs the Client ID and
+# Secret, since OpenAM will only respond to an introspect that has been validated with Basic Auth
+# using them.
+#
+# See https://docs.mulesoft.com/anypoint-studio/v/6/studio-policy-editor and
+# https://docs.mulesoft.com/api-manager/creating-a-policy-walkthrough
+#
+# This policy requires:
+#  - header Authorization: Bearer <access_token>
+#  - parameters client_id and client_secret
+#
+# On success, it adds the following headers to the flow based on the keys in the introspection response.
+#  X-AGW-scope
+#  etc. TBD upon further experimentation.
+#
+# OpenAM endpoints are documented here:
+# https://backstage.forgerock.com/#!/docs/openam/13.5/dev-guide#rest-api-oauth2-client-endpoints
+#
+# The introspect endpoint requires the following:
+#  - method POST
+#  - header Authorization: Basic <HTTPBasicAuth(client_id,client_secret)>
+#  - parameter token=<access_token>
+#
+# This policy has been tested only with OpenAM 14.0, so might not work with other RFC 7662 implementations.
+#
+# Copyright (c) 2016 The Trustees of Columbia University in the City of New York
+#
+name: OAuth 2.0 Access Token Introspection Policy
+description: |
+  Validates OAuth 2.0 Authorization token using the RFC 7662 introspect endpoint.
+  Returns scope, sub, userid, etc. (see [RFC 7662](https://tools.ietf.org/html/rfc7662#page-6)).
+  This policy will require updates to the RAML definition in order to function. You can obtain the oauth_2_0 security scheme RAML snippet [here](https://github.com/raml-org/raml-spec/blob/master/versions/raml-08/raml-08.md#security),
+  the securedBy snippet [here](https://github.com/raml-org/raml-spec/blob/master/versions/raml-08/raml-08.md#usage-applying-a-security-scheme-to-an-api), and the client-id-required trait [here](https://docs.mulesoft.com/api-manager/client-id-based-policies).
+id: oauth2-token-introspection
+providedCharacteristics: 
+  - OAuth 2.0 protected
+requiredCharacteristics:
+  - Client ID required
+requiresConnectivity: true
+standalone: true
+type: custom
+category: Security
+configuration:
+  - 
+    propertyName: introspectPath
+    name: Introspect Path
+    description: OAuth 2.0 introspect endoint path
+    sensitive: false
+    type: string
+    defaultValue: openam/oauth2/introspect
+    optional: false
+  - 
+    propertyName: introspectClientId
+    name: client ID used for OAuth token introspection
+    description: Leave blank if the client credentials should be used. Otherwise supply client ID.
+    sensitive: false
+    type: string
+    optional: true
+  - 
+    propertyName: introspectClientSecret
+    name: client secret used for OAuth token introspection
+    description: Leave blank if the client credentials should be used. Otherwise supply client secret.
+    sensitive: true
+    type: string
+    optional: true
+  - 
+    propertyName: OAuthProto
+    name: OAuth protocol
+    description: OAuth 2.0 server protocol (HTTP or HTTPS)
+    sensitive: false
+    type: string
+    defaultValue: HTTPS
+    optional: false
+  -
+    propertyName: OAuthHost
+    name: OAuth host
+    description: OAuth 2.0 server host
+    sensitive: false
+    type: string
+    optional: false
+  - 
+    propertyName: OAuthPort
+    name: OAuth port
+    description: OAuth 2.0 introspect endoint port
+    sensitive: false
+    type: int
+    minimumValue: 1
+    maximumValue: 65535
+    defaultValue: 8443
+    optional: false
+  - 
+    propertyName: insecure
+    name: insecure TLS context (use for testing only)
+    description: Transport Layer Security certificate validation
+    sensitive: false
+    type: boolean
+    defaultValue: false
+    optional: true
+  - 
+    propertyName: scopes
+    name: Required scopes
+    description: OAuth 2.0 required scopes (leave blank if none)
+    sensitive: false
+    type: string
+    optional: true
+  - 
+    propertyName: logLevel
+    name: logging level
+    description: level to log messages at (primarily for debugging). Set to WARN to see log messages from this policy without having to see other debug-level messages.
+    sensitive: false
+    type: string
+    defaultValue: DEBUG
+    optional: false
+ramlSnippet: |
+  This policy will require updates to the RAML definition in order to function. Add this snippet to your RAML
+  See more about the oauth_2_0 security scheme RAML snippet [here](https://github.com/raml-org/raml-spec/blob/master/versions/raml-08/raml-08.md#security),
+  the securedBy snippet [here](https://github.com/raml-org/raml-spec/blob/master/versions/raml-08/raml-08.md#usage-applying-a-security-scheme-to-an-api), and the client-id-required trait [here](https://docs.mulesoft.com/api-manager/client-id-based-policies).
+  <PRE>
+  securitySchemes:
+    - oauth_2_0:
+      description: |
+          This API supports RFC 6749 OAuth 2.0 for authenticating all API requests using RFC 7662 token intropsection for validation.
+        type: OAuth 2.0
+        describedBy:
+          headers:
+            Authorization:
+              description: |
+                 Used to send a valid OAuth 2 access token. Use EITHER this header "access_token" query
+                 string parameter, not both.
+              type: string
+          queryParameters:
+            access_token:
+              description: |
+                 Used to send a valid OAuth 2 access token. Use EITHER this query parameter or the "Authorization"
+                 header, not both.
+              type: string
+          responses:
+            401:
+              description: |
+                Bad or expired token. This can happen if the user or the API revoked or expired an
+                access token. To fix, you should re-authenticate the user.
+            403:
+              description: |
+                Bad OAuth request (wrong consumer key, bad nonce, expired timestamp...). Unfortunately,
+                re-authenticating the user won't help here.
+        settings:
+          authorizationUri: INSERT OAUTH 2.0 AUTHORIZATION URI HERE.
+          accessTokenUri: INSERT OAUTH 2.0 ACCESS TOKEN URI HERE.
+          authorizationGrants: [ INSERT LIST OF OAUTH 2.0 GRANTS HERE ]
+          scopes: [ INSERT LIST OF REQURIED SCOPES HERE ]
+  </PRE>
+  
+  And, you need to add the client ID traits:
+  <PRE>
+  traits:
+    - client-id-required:
+      queryParameters:
+        client_id:
+          description: Client ID of the registered Anypoint app.
+          type: string
+          required: true
+        client_secret:
+          description: Client secret of the registered Anypoint app.
+          type: string
+          required: true
+  </PRE>
+  You also need to add the `securedBy` and `client_id_required` for your resource in the RAML. For example: 
+  <PRE>
+  /resources:
+    get:
+      securedBy: [oauth_2_0]
+      is: [client_id_required]
+  </PRE>
+ramlV1Snippet: |
+  This policy will require updates to the RAML definition in order to function. Add this snippet to your RAML
+  See more about the oauth_2_0 security scheme RAML snippet [here](https://github.com/raml-org/raml-spec/blob/master/versions/raml-08/raml-08.md#security),
+  the securedBy snippet [here](https://github.com/raml-org/raml-spec/blob/master/versions/raml-08/raml-08.md#usage-applying-a-security-scheme-to-an-api), and the client-id-required trait [here](https://docs.mulesoft.com/api-manager/client-id-based-policies).
+  <PRE>
+  securitySchemes:
+      oauth_2_0:
+      description: |
+          This API supports RFC 6749 OAuth 2.0 for authenticating all API requests using RFC 7662 token intropsection for validation.
+        type: OAuth 2.0
+        describedBy:
+          headers:
+            Authorization:
+              description: |
+                 Used to send a valid OAuth 2 access token. Use EITHER this header "access_token" query
+                 string parameter, not both.
+              type: string
+          queryParameters:
+            access_token:
+              description: |
+                 Used to send a valid OAuth 2 access token. Use EITHER this query parameter or the "Authorization"
+                 header, not both.
+              type: string
+          responses:
+            401:
+              description: |
+                Bad or expired token. This can happen if the user or the API revoked or expired an
+                access token. To fix, you should re-authenticate the user.
+            403:
+              description: |
+                Bad OAuth request (wrong consumer key, bad nonce, expired timestamp...). Unfortunately,
+                re-authenticating the user won't help here.
+        settings:
+          authorizationUri: INSERT OAUTH 2.0 AUTHORIZATION URI HERE.
+          accessTokenUri: INSERT OAUTH 2.0 ACCESS TOKEN URI HERE.
+          authorizationGrants: [ INSERT LIST OF OAUTH 2.0 GRANTS HERE ]
+          scopes: [ INSERT LIST OF REQURIED SCOPES HERE ]
+  </PRE>
+  
+  And, you need to add the client ID traits:
+  <PRE>
+  traits:
+      client-id-required:
+      queryParameters:
+        client_id:
+          description: Client ID of the registered Anypoint app.
+          type: string
+          required: true
+        client_secret:
+          description: Client secret of the registered Anypoint app.
+          type: string
+          required: true
+  </PRE>
+  You also need to add the `securedBy` and `client_id_required` for your resource in the RAML. For example: 
+  <PRE>
+  /resources:
+    get:
+      securedBy: [oauth_2_0]
+      is: [client_id_required]
+  </PRE>
