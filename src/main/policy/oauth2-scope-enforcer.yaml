@@ -6,7 +6,7 @@ description: |
   Validates OAuth 2.0 required scopes for each resource-method.
 id: oauth2-scope-enforcer
 # new feature as of 3.8.x: resource-level policy
-resourceLevelSupported: true
+resourceLevelSupported: false
 providedCharacteristics: []
 requiredCharacteristics:
   - OAuth 2.0 protected
@@ -15,9 +15,10 @@ standalone: true
 type: custom
 category: Security
 configuration:
-  - propertyName: scopeJSON
-    name: scopeJSON
-    description: scope enforcement JSON configuration
+  - propertyName: scopeMap
+    name: scopeMap
+    description: Names of methods:resources and required scopes
     sensitive: false
-    type: string
+    type: keyvaluess
     optional: false
+    allowMultiple: true
