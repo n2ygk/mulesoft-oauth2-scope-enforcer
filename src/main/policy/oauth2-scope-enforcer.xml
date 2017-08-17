@@ -22,7 +22,12 @@
     <pointcut>
       <api-platform-gw:api-pointcut apiName="{{ apiName }}" apiVersion="{{ apiVersionName }}"/>
     </pointcut>
-
+    <mule:processor-chain xmlns:mule="http://www.mulesoft.org/schema/mule/core" name="invalidScopeViolation">
+                <mule:logger message="Policy {{ policyId }} filtered the message #[message.getId()] based on OAuth 2.0 scope validation" level="INFO" />     
+                <mule:set-property propertyName="http.status" value="403"/>    
+                <mule:set-property propertyName="Content-Type" value="application/json"/>
+                <mule:set-payload value='{ "error": "invalid_scope", "error_description" : "Policy {{ policyId }}: Access Token does not have the required scope(s): #[flowVars.requiredScopes]"}'/>
+    </mule:processor-chain>
     <before>
       <mule:set-variable variableName="scopeMap" value="#[new java.util.HashMap();]" />
       <!-- hmm, I could probably just embed this mustache in the Python code... -->
@@ -38,18 +43,14 @@ import json
 # dig the scope list out of the JSON map:
 r = flowVars['_agwTokenContext']
 map = json.loads(r)
-if 'scope' in map:
-  scope = map['scope']
-else:
-  scope = ''
+scope = map['scope'] if 'scope' in map else ''
 flowVars['scope'] = scope
 k = 'X-AGW-scope'  # apparently can't pass an immutable string as the key
-message.setOutboundProperty(k,flowVars['scope'])
+message.setOutboundProperty('X-AGW-scope',flowVars['scope'])
 # look for configured required scopes for this method and resource:
 scopeMap = flowVars['scopeMap']
 lp = 'http.listener.path'
 listenerPath = message.getInboundProperty(lp)
-resource = 'xxx'
 m = 'http.method'
 method = message.getInboundProperty(m).lower()
 rp = 'http.request.path'
@@ -57,21 +58,35 @@ requestPath = message.getInboundProperty(rp)
 # strip the listener path out of the URL
 #    http.listener.path=/v1/api/*
 #     http.request.path=/v1/api/things
-if requestPath.find(listenerPath) == 0:
-  request = requestPath[len(listenerPath)-2:]
-  print("request is %s"%request)
+# TODO: deal with a pattern match when URI-params are involved.
+print("requestPath: %s listenerPath: %s"%(requestPath,listenerPath))
+if requestPath.find(listenerPath[:-2]) == 0:
+  resource = requestPath[len(listenerPath)-2:]
+  print("resource is %s method is %s"%(resource,method))
   scopeMapKey = method+':'+resource.replace('/','&#x2F;')
   print("scopeMapkey is %s"%scopeMapKey)
+  print(scopeMap)
   if scopeMapKey in scopeMap:
     requiredScopes = scopeMap[scopeMapKey]
-    print("Required Scopes: %s. Granted Scopes: %s. Now intersect them!"%(requiredScope,scope))
+    print("Required Scopes: %s. Granted Scopes: %s. Now intersect them!"%(requiredScopes,scope))
   else:
     requiredScopes = ''
-
+else:
+  print("request path doesn't match listener path")
+  requiredScopes = ''
+flowVars['requiredScopes'] = requiredScopes
+flowVars['pyStatus'] = 200
+if requiredScopes:
+  if not set(requiredScopes.split(' ')).issubset(set(scope.split(' '))):
+    print("Required Scopes are missing.")
+    flowVars['pyStatus'] = 403
 result=payload
 ]]>
         </scripting:script>
       </scripting:component>
+      <mule:message-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" onUnaccepted="invalidScopeViolation">
+        <mule:expression-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" expression="#[flowVars.pyStatus == 200]"/>
+      </mule:message-filter>
     </before>
 
 </policy>

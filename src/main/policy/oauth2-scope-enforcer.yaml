@@ -3,7 +3,11 @@
 #
 name: OAuth 2.0 Scope Enforcement Policy
 description: |
-  Validates OAuth 2.0 required scopes for each resource-method.
+  Validates OAuth 2.0 required scopes for each method:resource.
+  Enter methods in lowercase and resources as defined in the API.
+  For example: `get:/things`
+  Enter scopes as a space-separated list.
+  For example: `read foobar`
 id: oauth2-scope-enforcer
 # new feature as of 3.8.x: resource-level policy
 resourceLevelSupported: true
