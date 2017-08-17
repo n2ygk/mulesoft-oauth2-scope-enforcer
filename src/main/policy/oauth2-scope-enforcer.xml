@@ -24,12 +24,54 @@
     </pointcut>
 
     <before>
+      <mule:set-variable variableName="scopeMap" value="#[new java.util.HashMap();]" />
+      <!-- hmm, I could probably just embed this mustache in the Python code... -->
       {{#scopeMap}}
-      <mule:set-property propertyName="{{ key }}" value="{{ value }}"/>
+      	<mule:expression-component><![CDATA[
+      	  flowVars.scopeMap.put("{{ key }}","{{ value }}");
+          ]]>
+      	</mule:expression-component>
       {{/scopeMap}}
+      <scripting:component>
+        <scripting:script engine="jython"><![CDATA[
+import json
+# dig the scope list out of the JSON map:
+r = flowVars['_agwTokenContext']
+map = json.loads(r)
+if 'scope' in map:
+  scope = map['scope']
+else:
+  scope = ''
+flowVars['scope'] = scope
+k = 'X-AGW-scope'  # apparently can't pass an immutable string as the key
+message.setOutboundProperty(k,flowVars['scope'])
+# look for configured required scopes for this method and resource:
+scopeMap = flowVars['scopeMap']
+lp = 'http.listener.path'
+listenerPath = message.getInboundProperty(lp)
+resource = 'xxx'
+m = 'http.method'
+method = message.getInboundProperty(m).lower()
+rp = 'http.request.path'
+requestPath = message.getInboundProperty(rp)
+# strip the listener path out of the URL
+#    http.listener.path=/v1/api/*
+#     http.request.path=/v1/api/things
+if requestPath.find(listenerPath) == 0:
+  request = requestPath[len(listenerPath)-2:]
+  print("request is %s"%request)
+  scopeMapKey = method+':'+resource.replace('/','&#x2F;')
+  print("scopeMapkey is %s"%scopeMapKey)
+  if scopeMapKey in scopeMap:
+    requiredScopes = scopeMap[scopeMapKey]
+    print("Required Scopes: %s. Granted Scopes: %s. Now intersect them!"%(requiredScope,scope))
+  else:
+    requiredScopes = ''
+
+result=payload
+]]>
+        </scripting:script>
+      </scripting:component>
     </before>
-    
-    <after>
-    </after>
 
 </policy>
