@@ -1,5 +1,5 @@
 # mulesoft-oauth2-scope-enforcer
-MuleSoft custom API gateway policy enforcement of securedBy scopes
+MuleSoft custom API gateway OAuth 2.0 scope enforcement policy
 
 ## Introduction
 This Mulesoft API Gateway [custom policy](https://docs.mulesoft.com/api-manager/applying-custom-policies)
@@ -7,13 +7,43 @@ implements resource/method `securedBy` RAML scopes. It is meant to be added afte
 Access Token enforcement policies has already validated the Access Token and put the token information into
 the `_agwTokenContext` flowVar.
 
-The reason this is needed is the MuleSoft standard policies currently only implement _global_ checking for
-required scopes rather than for each specific resource and method:
+## Installing the Policy
+
+You must have API Manager privileges that allow you to install custom policies.
+Follow the [Mulesoft instructions](https://docs.mulesoft.com/api-manager/add-custom-policy-task)
+for adding custom policies, uploading the YAML and XML files.
+
+## Applying the Policy
+
+In API Manager for your app, select Policies/Apply New Policy and search for this custom policy. You
+can narrow down the search by selecting Fulfills `OAuth 2.0 scope enforcement`.
+
+![alt-text](search.png "screen shot of example of finding the custom OAuth 2.0 scope enforcement policy")
+
+Note that this policy requires an _upstream_ `OAuth 2.0 protected` policy to be installed first.
+
+Configure the scope enforcement policy by adding method:resource keys and values that are the 
+scopes you want to enforce
+for the given method:resource. In this example, we add `get:/things` with `read` as the required scope and
+`post:/things` with `create` scope. If you have a common (set of) scope(s) that you want enforced you can
+repeat them here for each table entry, or list them in the prior `OAuth 2.0 protected` policy.
+The method:resource name is similar to what the MuleSoft APIkit router uses for flow names.
+
+![alt-text](apply.png "screen shot of example of applying the custom OAuth 2.0 scope enforcement policy")
+
+
+## Why this custom policy is required
+
+The reason this custom policy is needed is that the MuleSoft standard policies currently only 
+implement _global_ checking for
+a static list of required scopes rather than allowing for different required scopes for
+each specific method and resource.
 
 ![alt-text](global-scope-enforcement.png "screen shot of example of global scope enforcement policy")
 
-One must provide a single list of scopes and can optionally indicated which resource pattern(s) and
-method(s) to apply that scope to. However, RAML is much more expressive and typically would use
+One must provide a single list of scopes and can optionally indicate which resource pattern(s) and
+method(s) to apply that scope to. However, RAML (and OpenAPI/Swagger) is (are)
+much more expressive and typically would use
 _different_ scopes for various resources and methods in an API:
 
 ```
@@ -43,34 +73,24 @@ securitySchemes:
 In this example, GET /things requires the `read` scope and POST /things requires the `create` scope and
 PUT /things/{id} requires the `update` scope.
 
-## Applying the Policy
-
-![alt-text](applied-policy.png "screen shot of example policy being applied")
-
 ## Policy Developer Notes
 The following are notes for developers of this Policy.
 
 The end game is to pass in a URL to the RAML description and then parse the RAML to find the securedBy
-and cache this into a map like this:
+and cache this into a map Later, but consider that the `securedBy` is a list
+of scopes that are _allowed_ and not necessarily _required_; there may be no way to identify which
+ones to use.
 
-Initially just implement a JSON map of `{"method:resource": "scopes"}`, for example:
+To start, just use a mustache-templated keyvalues map of `{"method:resource": "scopes"}`.
+See [oauth2-scope-enforcer.yaml](src/main/policy/oauth2-scope-enforcer.yaml) for an example
+of specifying a keyvalues configuration property and
+[oauth2-scope-enforcer.yaml](src/main/policy/oauth2-scope-enforcer.xml) for an example
+use of iterating over a map using `{{#map}} ... {{/map}}`.
 
-```
-{
-  "get:/things": "openid auth-columbia read",
-  "post:/things": "openid auth-columbia create",
-  "get:/things/{id}": "openid auth-columbia read",
-  "put:/things": "openid auth-columbia update"
-}
-```
-
-The RAML can be found at `/console/api/?raml` or in the API Developer Portal (subject to permissions
-TBD):
+The RAML can be found at `/console/api/?raml` if the APIkit console is enabled
+or in the API Developer Portal (subject to permissions TBD):
 
 ![alt-text](developer-portal.raml.png "screen shot of developer portal showing ROOT RAML URL")
-
-
-This naming is similar to what the MuleSoft APIkit router uses for flow names.
 
 Example inbound scoped properties for `PUT /v1/api/things/123` which belongs to the APIkit flow named
 `put:/things/{id}:api-config`:
@@ -88,27 +108,12 @@ http.scheme=https
 http.uri.params=ParameterMap{[id=[123]]}
 ```
 
-N.B. looks like I can use the regex stuff for resources: https://docs.mulesoft.com/api-manager/add-rlp-support-task
-
-- Do we make the policy map use wildcards or regexps to match URL parameters?
-
-### Installing the Policy
-
-Follow the Mulesoft instructions for adding custom policies, uploading the YAML and XML files.
-
 ### Developing and Testing Mulesoft Custom Policies in Anypoint Studio
 See https://docs.mulesoft.com/anypoint-studio/v/6/studio-policy-editor and
 https://docs.mulesoft.com/api-manager/creating-a-policy-walkthrough
 
-Since we also use Anypoint Studio to test policies pushed from the Anypoint API Manager, there
-can be some confusion about the API Autodiscovery mechanism and whether we are testing
-our locally-developed policy (a beta feature of Studio 6.1) or one pushed down from API Manager.
-There's nothing in the configuration that says which one to use, but it actually just works
-as expected when you right-click on the policy and select Run As/API Custom Policy (configure):
-
-![alt text](api-cust-policy.png "Run As API Custom Policy (configure)")
-
-![alt text](api-cust-policy-config.png "Custom Policy Configuration Edit")
+However, it seems when testing a custom policy in Studio, other policies are no longer applied. This
+breaks things as we need the flowVars created by the upstream `OAuth 2.0 protected` policy.
 
 ### Inconsistency across Mule implementations of OAuth 2.0
 
@@ -122,7 +127,7 @@ with how the result of a successful validation is made available to the downstre
   - X-AGW-userid for authorization code grant type, or
   - X-AGW-client_id for client credentials grant type
   - flowVars[\_agwUser] HashMap which includes uid, group and email keys.
-- The [PingFederate OAuth Token Enforcement policy](https://docs.mulesoft.com/api-manager/pingfederate-oauth-token-enforcement-policy#obtaining-user-credentials)
+- The [PingFederate OAuth Token Enforcement policy](https://docs.mulesoft.com/api-manager/pingfederate-oauth-token-  enforcement-policy#obtaining-user-credentials)
   similarly to OpenAM uses the same values.
 
 So, I conclude that the “standard” is what’s used for OpenAM and PingFederate.
@@ -130,7 +135,8 @@ So, I conclude that the “standard” is what’s used for OpenAM and PingFeder
 **Additional observed flowVars:**
 
 https://docs.mulesoft.com/release-notes/api-gateway-2.0.2-release-notes documents `flowVars[_agwTokenContext]` 
-which on inspection is a String containing the returned JSON map.
+which on inspection is a String containing the returned JSON map. This flowVar is critical as it contains
+the granted _scope_ list.
 
 I've also seen these flowVars inbound:
 - \_client\_id
@@ -139,8 +145,6 @@ I've also seen these flowVars inbound:
 
 ### CAVEATS
 - **Consider this an Alpha test experimental version!**
-
-### TO DO
 
 ## Author
 Alan Crosswell

@@ -19,36 +19,30 @@
 		       http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
 		       http://www.mulesoft.org/schema/mule/api-platform-gw http://www.mulesoft.org/schema/mule/api-platform-gw/current/mule-api-platform-gw.xsd">
 
-    <pointcut>
-      <api-platform-gw:api-pointcut apiName="{{ apiName }}" apiVersion="{{ apiVersionName }}"/>
-    </pointcut>
-    <mule:processor-chain xmlns:mule="http://www.mulesoft.org/schema/mule/core" name="invalidScopeViolation">
-                <mule:logger message="Policy {{ policyId }} filtered the message #[message.getId()] based on OAuth 2.0 scope validation" level="INFO" />     
-                <mule:set-property propertyName="http.status" value="403"/>    
-                <mule:set-property propertyName="Content-Type" value="application/json"/>
-                <mule:set-payload value='{ "error": "invalid_scope", "error_description" : "Policy {{ policyId }}: Access Token does not have the required scope(s): #[flowVars.requiredScopes]"}'/>
-    </mule:processor-chain>
-    <before>
-      <mule:set-variable variableName="scopeMap" value="#[new java.util.HashMap();]" />
-      <!-- hmm, I could probably just embed this mustache in the Python code... -->
-      {{#scopeMap}}
-      	<mule:expression-component><![CDATA[
-      	  flowVars.scopeMap.put("{{ key }}","{{ value }}");
-          ]]>
-      	</mule:expression-component>
-      {{/scopeMap}}
-      <scripting:component>
-        <scripting:script engine="jython"><![CDATA[
+  <pointcut>
+    <api-platform-gw:api-pointcut apiName="{{ apiName }}" apiVersion="{{ apiVersionName }}"/>
+  </pointcut>
+  <mule:processor-chain xmlns:mule="http://www.mulesoft.org/schema/mule/core" name="invalidScopeViolation">
+    <mule:logger message="Policy {{ policyId }} filtered the message #[message.getId()] based on OAuth 2.0 scope validation" level="INFO" />
+    <mule:set-property propertyName="http.status" value="403"/>
+    <mule:set-property propertyName="Content-Type" value="application/json"/>
+    <mule:set-payload value='{ "error": "invalid_scope", "error_description" : "Policy {{ policyId }}: Access Token does not have the required scope(s): #[flowVars.requiredScopes]"}'/>
+  </mule:processor-chain>
+  <before>
+    <scripting:component>
+      <scripting:script engine="jython"><![CDATA[
 import json
+scopeMap = {
+{{#scopeMap}}
+  '{{ key }}': '{{ value }}',
+{{/scopeMap}}
+}
 # dig the scope list out of the JSON map:
 r = flowVars['_agwTokenContext']
 map = json.loads(r)
 scope = map['scope'] if 'scope' in map else ''
 flowVars['scope'] = scope
-k = 'X-AGW-scope'  # apparently can't pass an immutable string as the key
-message.setOutboundProperty('X-AGW-scope',flowVars['scope'])
 # look for configured required scopes for this method and resource:
-scopeMap = flowVars['scopeMap']
 lp = 'http.listener.path'
 listenerPath = message.getInboundProperty(lp)
 m = 'http.method'
@@ -82,11 +76,11 @@ if requiredScopes:
     flowVars['pyStatus'] = 403
 result=payload
 ]]>
-        </scripting:script>
-      </scripting:component>
-      <mule:message-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" onUnaccepted="invalidScopeViolation">
-        <mule:expression-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" expression="#[flowVars.pyStatus == 200]"/>
-      </mule:message-filter>
-    </before>
+      </scripting:script>
+    </scripting:component>
+    <mule:message-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" onUnaccepted="invalidScopeViolation">
+      <mule:expression-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" expression="#[flowVars.pyStatus == 200]"/>
+    </mule:message-filter>
+  </before>
 
 </policy>
