@@ -37,7 +37,7 @@ The method:resource name is similar to what the MuleSoft APIkit router uses for 
 The reason this custom policy is needed is that the MuleSoft standard policies currently only 
 implement _global_ checking for
 a static list of required scopes rather than allowing for different required scopes for
-each specific method and resource.
+each specific method and resource as show here:
 
 ![alt-text](global-scope-enforcement.png "screen shot of example of global scope enforcement policy")
 
@@ -84,7 +84,7 @@ ones to use.
 To start, just use a mustache-templated keyvalues map of `{"method:resource": "scopes"}`.
 See [oauth2-scope-enforcer.yaml](src/main/policy/oauth2-scope-enforcer.yaml) for an example
 of specifying a keyvalues configuration property and
-[oauth2-scope-enforcer.yaml](src/main/policy/oauth2-scope-enforcer.xml) for an example
+[oauth2-scope-enforcer.xml](src/main/policy/oauth2-scope-enforcer.xml) for an example
 use of iterating over a map using `{{#map}} ... {{/map}}`.
 
 The RAML can be found at `/console/api/?raml` if the APIkit console is enabled
@@ -124,27 +124,33 @@ with how the result of a successful validation is made available to the downstre
   identifies the user as `_muleEvent.session.securityContext.authentication.principal.username` and suggests putting this in an X-Authenticated-Userid header
 - The [OpenAM OAuth Token Enforcement policy](https://docs.mulesoft.com/api-manager/openam-oauth-token-enforcement-policy#obtaining-user-credentials)
   identifies the user as one of the following inboundProperties (HTTP headers) or flow variables:
-  - X-AGW-userid for authorization code grant type, or
-  - X-AGW-client_id for client credentials grant type
-  - flowVars[\_agwUser] HashMap which includes uid, group and email keys.
-- The [PingFederate OAuth Token Enforcement policy](https://docs.mulesoft.com/api-manager/pingfederate-oauth-token-  enforcement-policy#obtaining-user-credentials)
+  - `X-AGW-userid` user ID for authorization code grant type
+  - `X-AGW-client_id` client ID
+  - `flowVars[_agwUser]` HashMap which includes uid, group and email keys.
+- The [PingFederate OAuth Token Enforcement policy](https://docs.mulesoft.com/api-manager/pingfederate-oauth-token-enforcement-policy#obtaining-user-credentials)
   similarly to OpenAM uses the same values.
 
-So, I conclude that the “standard” is what’s used for OpenAM and PingFederate.
+**Additional observed, but undocumented, flowVars:**
 
-**Additional observed flowVars:**
-
-https://docs.mulesoft.com/release-notes/api-gateway-2.0.2-release-notes documents `flowVars[_agwTokenContext]` 
+[The deprecated API Gateway 2.0.2 release notes](https://docs.mulesoft.com/release-notes/api-gateway-2.0.2-release-notes) documents `flowVars[_agwTokenContext]` 
 which on inspection is a String containing the returned JSON map. This flowVar is critical as it contains
-the granted _scope_ list.
+the granted _scope_ list, among other things.
 
-I've also seen these flowVars inbound:
-- \_client\_id
-- \_client\_name
+I've also seen these flowVars:
+- `_client_id` ID of the registered client app
+- `_client_name` name of the registered client app
+
+So, I conclude that the “standard” is what’s used for OpenAM and PingFederate. If you are using some other
+OAuth 2.0 token validation policy, this custom policy **will break** if \_agwTokenContext is not present.
 
 
 ### CAVEATS
 - **Consider this an Alpha test experimental version!**
+- Not yet implemented for URI-parameter resources (e.g. `/things/{id}`)
+
+### TODO
+- Remove spurious flowVars like pyStatus.
+- Implement regexp matching for URI-parameter resources (e.g. `get:/things/.*`)
 
 ## Author
 Alan Crosswell
@@ -152,5 +158,17 @@ Alan Crosswell
 Copyright (c) 2017 The Trustees of Columbia University in the City of New York
 
 ## LICENSE
-[Apache 2.0](LICENSE)
+
+Licensed under the [Apache License, Version 2.0](LICENSE) (the "License"); you may not use this file
+except in compliance with the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+implied. See the License for the specific language governing
+permissions and limitations under the License.
+
+
 
