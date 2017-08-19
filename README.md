@@ -146,11 +146,10 @@ OAuth 2.0 token validation policy, this custom policy **will break** if \_agwTok
 
 ### CAVEATS
 - **Consider this an Alpha test experimental version!**
-- Not yet implemented for URI-parameter resources (e.g. `/things/{id}`)
 
 ### TODO
-- Remove spurious flowVars like pyStatus.
-- Implement regexp matching for URI-parameter resources (e.g. `get:/things/.*`)
+- Test scopeMap keys syntax (must be verb:resource, verb is one of get,put,etc.
+- Caching of method:url decision for performance
 
 ## Author
 Alan Crosswell
