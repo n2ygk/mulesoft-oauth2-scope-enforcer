@@ -3,7 +3,8 @@ MuleSoft custom API gateway OAuth 2.0 scope enforcement policy
 
 ## Introduction
 This Mulesoft API Gateway [custom policy](https://docs.mulesoft.com/api-manager/applying-custom-policies)
-implements resource/method `securedBy` RAML scopes. It is meant to be added after one of the OAuth 2.0
+implements resource/method `securedBy` RAML scopes and optional "Enterprise" scope enforcement.
+It is meant to be added after one of the OAuth 2.0
 Access Token enforcement policies has already validated the Access Token and put the token information into
 the `_agwTokenContext` flowVar.
 
@@ -22,22 +23,43 @@ can narrow down the search by selecting Fulfills `OAuth 2.0 scope enforcement`.
 
 Note that this policy requires an _upstream_ `OAuth 2.0 protected` policy to be installed first.
 
+### Configuring Enterprise Scope Validation
+Provide the triggering scope and group attribute name. The triggering scope causes enterprise validation for
+the given attribute that is in the OAuth 2.0 validation result's access\_token (\_agwTokenContext).
+For example: `auth-columbia`:`group` is used when the `auth-columbia` scope is present and the
+access_token contains a `group` attribute that is a list of "OAuth groups" the user is a member of.
+
+The first matching triggering scope is used and any other matching triggers will be ignored.
+
+This group list will be intersected with the OAuth 2.0 granted scope list to produce the _effective_ scope list
+which will then be tested for scope enforcement.
+
+### Configuring Method:Resource Scope Enforcement
 Configure the scope enforcement policy by adding method:resource keys and values that are the 
-scopes you want to enforce
-for the given method:resource. In this example, we add `get:/things` with `read` as the required scope and
-`post:/things` with `create` scope. If you have a common (set of) scope(s) that you want enforced you can
-repeat them here for each table entry, or list them in the prior `OAuth 2.0 protected` policy.
+scopes you want to enforce for the given method:resource.
+In this example, we add `get:/things` with `read` as the required scope and
+`post:/things` with `create` scope.
 The method:resource name is similar to what the MuleSoft APIkit router uses for flow names.
+
+If you have a common (set of) scope(s) that you want enforced you can
+repeat them here for each table entry, or list them in the prior `OAuth 2.0 protected` policy.
+
 
 ![alt-text](apply.png "screen shot of example of applying the custom OAuth 2.0 scope enforcement policy")
 
+### flowVars added
+As a convenience, this policy also sets the following flowVars for use by subsequent modules in the flow:
+
+  **scope**: (effective) list of granted scopes
+
+  **requiredScopes**: list of required scopes configured by this policy for this method & resource
 
 ## Why this custom policy is required
 
 The reason this custom policy is needed is that the MuleSoft standard policies currently only 
 implement _global_ checking for
 a static list of required scopes rather than allowing for different required scopes for
-each specific method and resource as show here:
+each specific method and resource as shown here:
 
 ![alt-text](global-scope-enforcement.png "screen shot of example of global scope enforcement policy")
 
@@ -79,7 +101,7 @@ The following are notes for developers of this Policy.
 The end game is to pass in a URL to the RAML description and then parse the RAML to find the securedBy
 and cache this into a map Later, but consider that the `securedBy` is a list
 of scopes that are _allowed_ and not necessarily _required_; there may be no way to identify which
-ones to use.
+ones to use; RAML is unclear about the semantics of OAuth 2.0 scopes.
 
 To start, just use a mustache-templated keyvalues map of `{"method:resource": "scopes"}`.
 See [oauth2-scope-enforcer.yaml](src/main/policy/oauth2-scope-enforcer.yaml) for an example
@@ -114,6 +136,10 @@ https://docs.mulesoft.com/api-manager/creating-a-policy-walkthrough
 
 However, it seems when testing a custom policy in Studio, other policies are no longer applied. This
 breaks things as we need the flowVars created by the upstream `OAuth 2.0 protected` policy.
+
+Since it's hard to debug Python Code in the MuleSoft Jython world, use [test.py](./test.py) as a simple test harness:
+Copy the configured Python code from the relevant XML file in `~/AnypointStudio/workspace/.mule/policies/` and
+append it to test.py.
 
 ### Inconsistency across Mule implementations of OAuth 2.0
 
