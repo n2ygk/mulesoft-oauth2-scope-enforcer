@@ -29,10 +29,21 @@
 		       http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
 		       http://www.mulesoft.org/schema/mule/api-platform-gw http://www.mulesoft.org/schema/mule/api-platform-gw/current/mule-api-platform-gw.xsd">
 
-<!-- TODO need to update this for regex pointcuts -->
+  <!-- Apply configurations to specific methods & resources: A pointcut for each configured condition. -->
+  {{#pointcutData}}
+  <pointcut>
+    <api-platform-gw:api-pointcut apiName="{{ apiName }}" apiVersion="{{ apiVersionName }}"/>
+    <resource methodRegex="{{ methodRegex }}" uriTemplateRegex="{{ uriTemplateRegex }}"/>
+  </pointcut>
+  {{/pointcutData}}
+
+  <!-- Apply configurations to all API methods & resources: A single pointcut for everything. -->
+  {{^pointcutData.length}}
   <pointcut>
     <api-platform-gw:api-pointcut apiName="{{ apiName }}" apiVersion="{{ apiVersionName }}"/>
   </pointcut>
+  {{/pointcutData.length}}
+
   <mule:processor-chain xmlns:mule="http://www.mulesoft.org/schema/mule/core" name="invalidScopeViolation">
     <mule:logger message="Policy {{ policyId }} filtered the message #[message.getId()] based on OAuth 2.0 scope validation" level="INFO" />
     <mule:set-property propertyName="http.status" value="403"/>
