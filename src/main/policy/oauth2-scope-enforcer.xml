@@ -67,10 +67,30 @@ scopeMap = {
   },
 {{/scopeMap}}
 }
+
+enterpriseValidation = {
+{{#enterpriseValidation}}
+  '{{ key }}': '{{ value }}',
+{{/enterpriseValidation}}
+}
+
 # dig the scope list out of the JSON map:
 r = flowVars['_agwTokenContext']
 map = json.loads(r) if r else {}
 scope = map['scope'] if 'scope' in map else ''
+scopeList = scope.split(' ')
+# do enterprise scope validation
+groupAttr = None
+for e in enterpriseValidation:
+  if e in scopeList:
+    groupAttr = enterpriseValidation[e]
+    break
+if groupAttr and 'access_token' in map and groupAttr in map['access_token']:
+  groups = map['access_token'][groupAttr]
+  effective_scopelist = set(scopeList).intersection(set(groups.split(' ')))
+  effective_scope = ' '.join(effective_scopelist)
+  print("granted scopes: %s groups: %s -> effective scopes: %s"%(scope,groups,effective_scope))
+  scope = effective_scope
 flowVars['scope'] = scope # expose the scope to downstream app
 # look for configured required scopes for this method and resource:
 # strip the listener path out of the URL
@@ -89,7 +109,6 @@ if requestPath.find(listenerPath[:-2]) == 0: # remove the '/*'
       print('resource %s matches rule %s'%(resource,k))
       requiredScopes = v['scope']
       break
-  print("Required Scopes: %s. Granted Scopes: %s. Now intersect them!"%(requiredScopes,scope))
 else:
   print("request path doesn't match listener path")
 flowVars['requiredScopes'] = requiredScopes

@@ -13,15 +13,30 @@
 #
 name: OAuth 2.0 Scope Enforcement Policy
 description: |
-  Validates OAuth 2.0 required scopes for each method:resource.
-  Enter methods in lowercase and resource names as regular expressions.
+  This policy validates OAuth 2.0 required scopes for each method & resource and optionally adds _enterprise
+  scope validation_ in which group memberships from the enterprise's authn/z system are intersected with granted
+  scopes to create _effective scope_ grants.
+
+  **Configuring Enterprise OAuth 2.0 scopes validation**
+  Provide the triggering scope and group attribute name. The triggering scope causes enterprise validation for
+  the given attribute that is in the OAuth 2.0 validation result's access_token (_agwTokenContext).
+  For example: *auth-columbia*:*group* is used when the *auth-columbia* scope is present and the
+  access_token contains a `group` attribute that is a list of "OAuth groups" the user is a member of.
+
+  The first matching triggering scope is used and any other matching triggers will be ignored.
+
+  This group list will be intersected with the OAuth 2.0 granted scope list to produce the _effective_ scope list
+  which will then be tested for scope enforcement.
+
+  **Configuring method:resource and required scopes**
+  Enter HTTP methods (get,post,put,patch,delete) in lowercase and resource names as regular expressions.
   For example: `get:/things` or `post:/things/.*`
   Enter scopes as a space-separated list.
   For example: `read foobar`
 
-  This policy also sets the following flowVars:
-    - scope
-    - requiredScopes
+  As a convenience, this policy also sets the following flowVars for use by subsequent modules in the flow:
+    **scope**: (effective) list of granted scopes
+    **requiredScopes**: list of required scopes configured by this policy for this method & resource
 id: oauth2-scope-enforcer
 # new feature as of 3.8.x: resource-level policy
 resourceLevelSupported: true
@@ -34,11 +49,15 @@ standalone: true
 type: custom
 category: Security
 configuration:
-  - propertyName: scopeMap
-    name: scopeMap
-    description: Names of methods:resources and required scopes
+  - propertyName: enterpriseValidation
+    name: Enterprise OAuth 2.0 scopes validation
     sensitive: false
     type: keyvalues
-    optional: false
+    optional: true
     allowMultiple: true
-  
+  - propertyName: scopeMap
+    name: Method:resource and required scopes
+    sensitive: false
+    type: keyvalues
+    optional: true
+    allowMultiple: true
