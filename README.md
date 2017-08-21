@@ -174,6 +174,7 @@ OAuth 2.0 token validation policy, this custom policy **will break** if \_agwTok
 - **Consider this an Alpha test experimental version!**
 
 ### TODO
+- Fail closed with a 503 if there's no matching method:resource regex
 - Test scopeMap keys syntax (must be verb:resource, verb is one of get,put,etc.
 - Caching of method:url decision for performance
 

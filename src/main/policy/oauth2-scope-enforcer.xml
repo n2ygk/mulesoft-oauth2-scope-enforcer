@@ -44,87 +44,128 @@
   </pointcut>
   {{/pointcutData.length}}
 
-  <mule:processor-chain xmlns:mule="http://www.mulesoft.org/schema/mule/core" name="invalidScopeViolation">
-    <mule:logger message="Policy {{ policyId }} filtered the message #[message.getId()] based on OAuth 2.0 scope validation" level="INFO" />
-    <mule:set-property propertyName="http.status" value="403"/>
+  <mule:processor-chain xmlns:mule="http://www.mulesoft.org/schema/mule/core" name="pyViolation">
+    <mule:logger message="Policy {{ policyId }} #[flowVars.pyError]: #[flowVars.pyErrorDescription]" level="WARN" />
+    <mule:set-property propertyName="http.status" value="#[flowVars.pyStatus]"/>
     <mule:set-property propertyName="Content-Type" value="application/json"/>
-    <mule:set-payload value='{ "error": "invalid_scope", "error_description" : "Policy {{ policyId }}: Access Token does not have the required scope(s): #[flowVars.requiredScopes]"}'/>
+    <mule:set-payload value='{ "error": "#[flowVars.pyError]", "error_description" : "Policy {{ policyId }}: #[flowVars.pyErrorDescription]"}'/>
   </mule:processor-chain>
   <before>
     <scripting:component>
       <scripting:script engine="jython"><![CDATA[
 import json
 import re
-# scopeMap key verb:resource is split into verb and re.compile(resource). Example:
-#  'get:&#x2F;things':         {'verb': 'get', scope: 'read', 're': <_sre.SRE_Pattern object at 0x10aff68b0>},
-#  'get:&#x2F;things&#x2F;.*': {'verb': 'get', scope: 'read', 're': <_sre.SRE_Pattern object at 0x104bec2e8>}, ...
-scopeMap = {
-{{#scopeMap}}
-  '{{ key }}': {
-    'verb': '{{ key }}'.split(':')[0],
-    'scope': '{{ value }}',
-    're': re.compile('{{ key }}'.split(':')[1])
-  },
-{{/scopeMap}}
-}
 
-enterpriseValidation = {
-{{#enterpriseValidation}}
-  '{{ key }}': '{{ value }}',
-{{/enterpriseValidation}}
-}
+def doit():
+  class ret:
+    pyStatus = 503
+    pyError = 'policy_misconfigured'
+    pyErrorDescription = 'unknown misconfiguration'
 
-# dig the scope list out of the JSON map:
-r = flowVars['_agwTokenContext']
-map = json.loads(r) if r else {}
-scope = map['scope'] if 'scope' in map else ''
-scopeList = scope.split(' ')
-# do enterprise scope validation
-groupAttr = None
-for e in enterpriseValidation:
-  if e in scopeList:
-    groupAttr = enterpriseValidation[e]
-    break
-if groupAttr and 'access_token' in map and groupAttr in map['access_token']:
-  groups = map['access_token'][groupAttr]
-  effective_scopelist = set(scopeList).intersection(set(groups.split(' ')))
-  effective_scope = ' '.join(effective_scopelist)
-  print("granted scopes: %s groups: %s -> effective scopes: %s"%(scope,groups,effective_scope))
-  scope = effective_scope
-flowVars['scope'] = scope # expose the scope to downstream app
-# look for configured required scopes for this method and resource:
-# strip the listener path out of the URL
-#    http.listener.path=/v1/api/*
-#     http.request.path=/v1/api/things
-# TODO: deal with a pattern match when URI-params are involved (get:/things/{id}).
-listenerPath = message.getInboundProperty('http.listener.path')
-method = message.getInboundProperty('http.method').lower()
-requestPath = message.getInboundProperty('http.request.path')
-requiredScopes = ''
-if requestPath.find(listenerPath[:-2]) == 0: # remove the '/*'
-  resource = requestPath[len(listenerPath)-2:].replace('/','&#x2F;') # they HTML-quote the '/'
-  print(scopeMap)
-  for k,v in scopeMap.items():
-    if v['verb'] == method and v['re'].match(resource):
-      print('resource %s matches rule %s'%(resource,k))
-      requiredScopes = v['scope']
+  enterpriseValidation = {
+  {{#enterpriseValidation}}
+    '{{ key }}': '{{ value }}',
+  {{/enterpriseValidation}}
+  }
+
+  mustacheMap = {
+  {{#scopeMap}}
+    '{{ key }}': '{{ value }}',
+  {{/scopeMap}}
+  }
+
+  scopeMap = {}
+  verbs = ['get','post','put','update','patch','delete']
+
+  for key,value in mustacheMap.items():
+    try:
+      verb,resource=key.split(':')
+    except ValueError:
+      ret.pyErrorDescription = 'key (%s) must be method:resource'%key
+      return ret
+    if resource[-1] != '$': # force a complete match
+      resource = resource + '$'
+    if verb not in verbs:
+      ret.pyErrorDescription = 'method (%s) must be one of: %s'%(verb,', '.join(verbs))
+      return ret
+    scopeMap[key] = {
+      'verb': verb,
+      'scope': value,
+      're': re.compile(resource)
+    }
+
+  if '_agwTokenContext' in flowVars:
+    map = json.loads(flowVars['_agwTokenContext']) # dig the scope list out of the JSON map:
+  else:
+    ret.pyStatus = 403
+    ret.pyError = 'invalid_scope'
+    ret.pyErrorDescription = 'required Access Token is missing.'
+    return ret
+  scope = map['scope'] if 'scope' in map else ''
+  scopeList = scope.split(' ')
+  # do enterprise scope validation
+  groupAttr = None
+  for e in enterpriseValidation:
+    if e in scopeList:
+      groupAttr = enterpriseValidation[e]
       break
-else:
-  print("request path doesn't match listener path")
-flowVars['requiredScopes'] = requiredScopes
-flowVars['pyStatus'] = 200
-if requiredScopes:
-  if not set(requiredScopes.split(' ')).issubset(set(scope.split(' '))):
-    print("Required Scopes are missing.")
-    flowVars['pyStatus'] = 403
+  if groupAttr and 'access_token' in map and groupAttr in map['access_token']:
+    groups = map['access_token'][groupAttr]
+    effective_scopelist = set(scopeList).intersection(set(groups.split(' ')))
+    effective_scope = ' '.join(effective_scopelist)
+    scope = effective_scope
+  flowVars['scope'] = scope # expose the scope to downstream app
+  # look for configured required scopes for this method and resource:
+  # strip the listener path out of the URL
+  #    http.listener.path=/v1/api/*
+  #     http.request.path=/v1/api/things
+  listenerPath = message.getInboundProperty('http.listener.path')
+  method = message.getInboundProperty('http.method').lower()
+  requestPath = message.getInboundProperty('http.request.path')
+  requiredScopes = ''
+  # search for a match. If none found, default to fail closed.
+  ret.pyStatus = 503
+  ret.pyError = 'policy_misconfigured'
+  ret.pyErrorDescription = 'No configured matching method:resource'
+  if requestPath.find(listenerPath[:-2]) == 0: # remove the '/*'
+    resource = requestPath[len(listenerPath)-2:].replace('/','&#x2F;') # they HTML-quote the '/'
+    for k,v in scopeMap.items():
+      if v['verb'] == method and v['re'].match(resource):
+	requiredScopes = v['scope']
+	ret.pyStatus = 200
+	ret.pyError = 'OK'
+	ret.pyErrorDescription = 'OK'
+	break
+  else:
+    ret.pyStatus = 503
+    ret.pyError = 'policy_misconfigured'
+    ret.pyErrorDescription = "request path (%s) doesn't match listener path (%s)."%(requestPath,listenerPath)
+  if requiredScopes:
+    flowVars['requiredScopes'] = requiredScopes
+    if not set(requiredScopes.split(' ')).issubset(set(scope.split(' '))):
+      ret.pyStatus = 403
+      ret.pyError = 'invalid_scope'
+      ret.pyErrorDescription = 'Access Token does not have the required scopes: %s'%requiredScopes
+  else: # it's not OK to explicitly configure no requiredScopes.
+    ret.pyStatus = 503
+    ret.pyError = 'policy_misconfigured'
+    ret.pyErrorDescription = 'request path (%s) has no requried scopes: Configure Method & Resource conditions.'%requestPath
+  return ret
+
+ret = doit()
+flowVars['pyStatus'] = ret.pyStatus
+flowVars['pyError'] = ret.pyError
+flowVars['pyErrorDescription'] = ret.pyErrorDescription
 result=payload
 ]]>
       </scripting:script>
     </scripting:component>
-    <mule:message-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" onUnaccepted="invalidScopeViolation">
+    <mule:message-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" onUnaccepted="pyViolation">
       <mule:expression-filter xmlns:mule="http://www.mulesoft.org/schema/mule/core" expression="#[flowVars.pyStatus == 200]"/>
     </mule:message-filter>
     <mule:remove-variable variableName="pyStatus"/>
+    <mule:remove-variable variableName="pyError"/>
+    <mule:remove-variable variableName="pyErrorDescription"/>
   </before>
 
 </policy>
