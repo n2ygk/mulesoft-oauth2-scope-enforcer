@@ -114,6 +114,11 @@ def doit():
     effective_scopelist = set(scopeList).intersection(set(groups.split(' ')))
     effective_scope = ' '.join(effective_scopelist)
     scope = effective_scope
+  else:
+    ret.pyStatus = 503
+    ret.pyError = 'policy_misconfigured'
+    ret.pyErrorDescription = 'Enterprise validation attribute (%s) was not found in Access Token.'%groupAttr
+    return ret
   flowVars['scope'] = scope # expose the scope to downstream app
   # look for configured required scopes for this method and resource:
   # strip the listener path out of the URL
@@ -149,7 +154,7 @@ def doit():
   else: # it's not OK to explicitly configure no requiredScopes.
     ret.pyStatus = 503
     ret.pyError = 'policy_misconfigured'
-    ret.pyErrorDescription = 'request path (%s) has no requried scopes: Configure Method & Resource conditions.'%requestPath
+    ret.pyErrorDescription = 'request path (%s) has no required scopes: Configure Method & Resource conditions.'%requestPath
   return ret
 
 ret = doit()

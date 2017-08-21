@@ -44,6 +44,14 @@ The method:resource name is similar to what the MuleSoft APIkit router uses for 
 If you have a common (set of) scope(s) that you want enforced you can
 repeat them here for each table entry, or list them in the prior `OAuth 2.0 protected` policy.
 
+### Configured Method & Resource Conditions
+
+As with most newer (Mule 3.8.1+) API Policies, you can limit this Policy to apply only to
+[specific resources and methods](https://docs.mulesoft.com/api-manager/resource-level-policies-about). This is
+**a level above** this policy's own method:resource scope enforcement that simply identifies the
+methods and resources for which this entire policy is applied. Yes, this is confusing! If you don't understand
+this feature, just leave it set to "Apply configurations to all API methods & resources". That's probably
+what you want.
 
 ![alt-text](apply.png "screen shot of example of applying the custom OAuth 2.0 scope enforcement policy")
 
@@ -54,12 +62,27 @@ As a convenience, this policy also sets the following flowVars for use by subseq
 
   **requiredScopes**: list of required scopes configured by this policy for this method & resource
 
+### Errors
+
+This policy throws the following errors and in general "fails closed" which prevents inadvertent unprotected access.
+Upon success it sets a 200 status and flow continues to the Mule app.
+
+| Status | Error Code           | Error Description              | Possible causes         |
+|:------:|----------------------|--------------------------------|-------------------------|
+| 403    | invalid\_scope        | Access Token does not have the required scopes: %s | Client app didn't request one or more of the listed scopes |
+| 403    | invalid\_scope        | required Access Token is missing | Method & Resource Conditions are set incorrectly in the upstream `OAuth 2.0 protected` policy (flowVars.\_agwTokenContext is not defined) |
+| 503    | policy\_misconfigured | Enterprise validation attribute (%s) was not found in Access Token | The wrong attribute name was configured for the "OAuth group list" |
+| 503    | policy\_misconfigured | request path (%s) has no required scopes: Configure Method & Resource conditions | A method:request was specified with a blank required scope list (which is impossible to configure, so how'd you end up here?). If you want a method:resource that requires `OAuth 2.0 protected` but with no scopes, use a Method & Resource condition here. If you want a method:resource that doesn't require `OAuth 2.0 protected` at all, use a Method & Resource scope in that Policy's configuration.|
+| 503    | policy\_misconfigured | request path (%s) doesn't match listener path (%s) | impossible condition:-) Probably a bug in Policy code |
+| 503    | policy\_misconfigured | unknown misconfiguration       | bug in Policy code      |
+
+
 ## Why this custom policy is required
 
 The reason this custom policy is needed is that the MuleSoft standard policies currently only 
 implement _global_ checking for
-a static list of required scopes rather than allowing for different required scopes for
-each specific method and resource as shown here:
+a static list of required scopes (which they misidentify as _supported scopes_) rather than allowing for
+different required scopes for each specific method and resource as shown here:
 
 ![alt-text](global-scope-enforcement.png "screen shot of example of global scope enforcement policy")
 
@@ -174,8 +197,7 @@ OAuth 2.0 token validation policy, this custom policy **will break** if \_agwTok
 - **Consider this an Alpha test experimental version!**
 
 ### TODO
-- Fail closed with a 503 if there's no matching method:resource regex
-- Test scopeMap keys syntax (must be verb:resource, verb is one of get,put,etc.
+- Determine whether should fail closed if enterprise validation is configured (require the scope?)
 - Caching of method:url decision for performance
 
 ## Author
