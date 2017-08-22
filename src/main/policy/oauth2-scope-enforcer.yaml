@@ -25,6 +25,9 @@ description: |
 
   The first matching triggering scope is used and any other matching triggers will be ignored.
 
+  If any enterprise scope triggers are provided, at least one of them must be present in the Access Token's
+  list of granted scopes.
+
   This group list will be intersected with the OAuth 2.0 granted scope list to produce the _effective_ scope list
   which will then be tested for scope enforcement.
 

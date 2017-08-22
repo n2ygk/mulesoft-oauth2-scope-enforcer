@@ -3,10 +3,12 @@ MuleSoft custom API gateway OAuth 2.0 scope enforcement policy
 
 ## Introduction
 This Mulesoft API Gateway [custom policy](https://docs.mulesoft.com/api-manager/applying-custom-policies)
-implements resource/method `securedBy` RAML scopes and optional "Enterprise" scope enforcement.
-It is meant to be added after one of the OAuth 2.0
-Access Token enforcement policies has already validated the Access Token and put the token information into
-the `_agwTokenContext` flowVar.
+validates OAuth 2.0 required scopes for each method & resource and optionally adds _enterprise scope validation_
+in which group memberships from the enterprise's authn/z system are intersected with granted
+scopes to create _effective scope_ grants.
+
+It is meant to be added after one of the `OAuth 2.0 Access Token enforcement` policies has already
+validated the Access Token and put the token information into the `_agwTokenContext` flowVar.
 
 ## Installing the Policy
 
@@ -29,7 +31,9 @@ the given attribute that is in the OAuth 2.0 validation result's access\_token (
 For example: `auth-columbia`:`group` is used when the `auth-columbia` scope is present and the
 access_token contains a `group` attribute that is a list of "OAuth groups" the user is a member of.
 
-The first matching triggering scope is used and any other matching triggers will be ignored.
+The first matching triggering scope is used and any other matching triggers will be ignored. At least one of
+the triggering scopes must be present in the Access Token's granted scopes. If no matching triggering scopes 
+are present then a 403 Invalid Scope error will be returned.
 
 This group list will be intersected with the OAuth 2.0 granted scope list to produce the _effective_ scope list
 which will then be tested for scope enforcement.
@@ -70,6 +74,7 @@ Upon success it sets a 200 status and flow continues to the Mule app.
 | Status | Error Code           | Error Description              | Possible causes         |
 |:------:|----------------------|--------------------------------|-------------------------|
 | 403    | invalid\_scope        | Access Token does not have the required scopes: %s | Client app didn't request one or more of the listed scopes |
+| 403    | invalid\_scope        | Access Token does not have any of the required enterprise scopes: %s | Enterprise scope validation was configured and none of the configuration validation triggering scopes was requested/granted |
 | 403    | invalid\_scope        | required Access Token is missing | Method & Resource Conditions are set incorrectly in the upstream `OAuth 2.0 protected` policy (flowVars.\_agwTokenContext is not defined) |
 | 503    | policy\_misconfigured | Enterprise validation attribute (%s) was not found in Access Token | The wrong attribute name was configured for the "OAuth group list" |
 | 503    | policy\_misconfigured | request path (%s) has no required scopes: Configure Method & Resource conditions | A method:request was specified with a blank required scope list (which is impossible to configure, so how'd you end up here?). If you want a method:resource that requires `OAuth 2.0 protected` but with no scopes, use a Method & Resource condition here. If you want a method:resource that doesn't require `OAuth 2.0 protected` at all, use a Method & Resource scope in that Policy's configuration.|

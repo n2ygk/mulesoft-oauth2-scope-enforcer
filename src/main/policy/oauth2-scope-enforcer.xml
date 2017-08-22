@@ -68,6 +68,8 @@ def doit():
   {{/enterpriseValidation}}
   }
 
+  enterpriseScopeAlternates = set([k for k in enterpriseValidation])
+
   mustacheMap = {
   {{#scopeMap}}
     '{{ key }}': '{{ value }}',
@@ -103,7 +105,12 @@ def doit():
     return ret
   scope = map['scope'] if 'scope' in map else ''
   scopeList = scope.split(' ')
-  # do enterprise scope validation
+  # do enterprise scope validation. If any alternates configured, at least one must be in the scopeList
+  if set(scopeList).isdisjoint(enterpriseScopeAlternates):
+    ret.pyStatus = 403
+    ret.pyError = 'invalid_scope'
+    ret.pyErrorDescription = 'Access Token does not have any of the required enterprise scopes: %s'%' '.join([k for k in enterpriseValidation])
+    return ret
   groupAttr = None
   for e in enterpriseValidation:
     if e in scopeList:
