@@ -73,7 +73,7 @@ Upon success it sets a 200 status and flow continues to the Mule app.
 
 | Status | Error Code           | Error Description              | Possible causes         |
 |:------:|----------------------|--------------------------------|-------------------------|
-| 403    | invalid\_scope        | Access Token does not have the required scopes: %s | Client app didn't request one or more of the listed scopes |
+| 403    | invalid\_scope        | Access Token does not have the required [enterprise] scopes: %s | Client app didn't request one or more of the listed scopes or enterprise scope validation removed a required scope |
 | 403    | invalid\_scope        | Access Token does not have any of the required enterprise scopes: %s | Enterprise scope validation was configured and none of the configuration validation triggering scopes was requested/granted |
 | 403    | invalid\_scope        | required Access Token is missing | Method & Resource Conditions are set incorrectly in the upstream `OAuth 2.0 protected` policy (flowVars.\_agwTokenContext is not defined) |
 | 503    | policy\_misconfigured | Enterprise validation attribute (%s) was not found in Access Token | The wrong attribute name was configured for the "OAuth group list" |
@@ -202,7 +202,7 @@ OAuth 2.0 token validation policy, this custom policy **will break** if \_agwTok
 - **Consider this an Alpha test experimental version!**
 
 ### TODO
-- Determine whether should fail closed if enterprise validation is configured (require the scope?)
+- add debug logging configuration option
 - Caching of method:url decision for performance
 
 ## Author

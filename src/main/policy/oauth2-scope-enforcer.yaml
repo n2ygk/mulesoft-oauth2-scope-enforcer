@@ -64,3 +64,10 @@ configuration:
     type: keyvalues
     optional: true
     allowMultiple: true
+  - propertyName: logLevel
+    name: Logging Level
+    description: One of DEBUG INFO WARN ERROR CRITICAL
+    sensitive: false
+    type: string
+    defaultValue: WARN
+    optional: false

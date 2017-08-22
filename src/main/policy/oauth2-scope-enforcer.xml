@@ -55,6 +55,19 @@
       <scripting:script engine="jython"><![CDATA[
 import json
 import re
+import logging
+
+# apparently this Python context stays around between invocations?
+print("configured logger")
+logger = logging.getLogger()
+print("logger.handlers:")
+print(logger.handlers)
+if not logger.handlers:
+  handler = logging.StreamHandler()
+  logger.addHandler(handler)
+  formatter = logging.Formatter('%(levelname)-5s %(asctime)s [Policy {{ policyId }}] %(message)s')
+  handler.setFormatter(formatter)
+logger.setLevel(logging.{{ logLevel }})
 
 def doit():
   class ret:
@@ -102,14 +115,18 @@ def doit():
     ret.pyStatus = 403
     ret.pyError = 'invalid_scope'
     ret.pyErrorDescription = 'required Access Token is missing.'
+    logger.debug('flowVars._agwTokenContext is missing. Check upstream policy.')
     return ret
   scope = map['scope'] if 'scope' in map else ''
+  logger.debug('Access token (granted) scopes: %s'%scope)
   scopeList = scope.split(' ')
   # do enterprise scope validation. If any alternates configured, at least one must be in the scopeList
+  logger.debug('Enterprise validation scope alternatives: %s'%' '.join([k for k in enterpriseValidation]))
   if set(scopeList).isdisjoint(enterpriseScopeAlternates):
     ret.pyStatus = 403
     ret.pyError = 'invalid_scope'
     ret.pyErrorDescription = 'Access Token does not have any of the required enterprise scopes: %s'%' '.join([k for k in enterpriseValidation])
+    logger.debug('No enterprise validation scope alternatives found in the granted scopes.')
     return ret
   groupAttr = None
   for e in enterpriseValidation:
@@ -121,10 +138,12 @@ def doit():
     effective_scopelist = set(scopeList).intersection(set(groups.split(' ')))
     effective_scope = ' '.join(effective_scopelist)
     scope = effective_scope
+    logger.debug('Enterprise groups: %s results in effective scopes: %s'%(groups,scope))
   else:
     ret.pyStatus = 503
     ret.pyError = 'policy_misconfigured'
     ret.pyErrorDescription = 'Enterprise validation attribute (%s) was not found in Access Token.'%groupAttr
+    logger.debug('Group attr "%s" is not found in the access token.')
     return ret
   flowVars['scope'] = scope # expose the scope to downstream app
   # look for configured required scopes for this method and resource:
@@ -147,21 +166,26 @@ def doit():
 	ret.pyStatus = 200
 	ret.pyError = 'OK'
 	ret.pyErrorDescription = 'OK'
+	logger.debug('Found a match in the scopeMap for %s:%s requiring scopes %s'%(method,resource,requiredScopes))
 	break
   else:
     ret.pyStatus = 503
     ret.pyError = 'policy_misconfigured'
     ret.pyErrorDescription = "request path (%s) doesn't match listener path (%s)."%(requestPath,listenerPath)
+    logger.debug(ret.pyErrorDescription)
   if requiredScopes:
     flowVars['requiredScopes'] = requiredScopes
     if not set(requiredScopes.split(' ')).issubset(set(scope.split(' '))):
       ret.pyStatus = 403
       ret.pyError = 'invalid_scope'
-      ret.pyErrorDescription = 'Access Token does not have the required scopes: %s'%requiredScopes
+      enterprise = 'enterprise ' if enterpiseScopeAlterates else ''
+      ret.pyErrorDescription = 'Access Token does not have the required %sscopes: %s'%(enterprise,requiredScopes)
+      logger.debug('Found matching required and granted scopes. Returning %s status'%ret.pyStatus)
   else: # it's not OK to explicitly configure no requiredScopes.
     ret.pyStatus = 503
     ret.pyError = 'policy_misconfigured'
     ret.pyErrorDescription = 'request path (%s) has no required scopes: Configure Method & Resource conditions.'%requestPath
+    logger.debug(ret.pyErrorDescription)
   return ret
 
 ret = doit()
