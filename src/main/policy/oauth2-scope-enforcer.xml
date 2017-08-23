@@ -55,7 +55,6 @@
       <scripting:script engine="jython"><![CDATA[
 import json
 import re
-from org.apache.log4j import *
 
 def doit():
   class ret:

@@ -55,5 +55,4 @@ log.setLevel(logging.DEBUG)
 ###
 # paste below the generated python code from for example ~/AnypointStudio/workspace/.mule/policies/24940-235285.xml
 # SNIP - SNIP - SNIP
-# and comment out the "from org.apache.log4j import *"!
 ###
