@@ -1,6 +1,26 @@
 # mulesoft-oauth2-scope-enforcer
 MuleSoft custom API gateway OAuth 2.0 scope enforcement policy
 
+## Contents
+- [Introduction](#introduction)
+- [Installing the Policy](#installing-the-policy)
+- [Applying the Policy](#applying-the-policy)
+	- [Configuring Enterprise Scope Validation](#configuring-enterprise-scope-validation)
+	- [Configuring Method:Resource Scope Enforcement](#configuring-methodresource-scope-enforcement)
+	- [Configuring Method & Resource Conditions](#configuring-method--resource-conditions)
+	- [Example Configuration with Enterprise Validation](#example-configuration-with-enterprise-validation)
+	- [Configuring Logging](#configuring-logging)
+	- [flowVars added](#flowvars-added)
+	- [Errors](#errors)
+- [Why this custom policy is required](#why-this-custom-policy-is-required)
+- [Policy Developer Notes](#policy-developer-notes)
+	- [Developing and Testing Mulesoft Custom Policies in Anypoint Studio](#developing-and-testing-mulesoft-custom-policies-in-anypoint-studio)
+	- [Inconsistency across Mule implementations of OAuth 2.0](#inconsistency-across-mule-implementations-of-oauth-20)
+	- [CAVEATS](#caveats)
+	- [TODO](#todo)
+- [Author](#author)
+- [LICENSE](#license)
+
 ## Introduction
 This Mulesoft API Gateway [custom policy](https://docs.mulesoft.com/api-manager/applying-custom-policies)
 validates OAuth 2.0 required scopes for each method & resource and optionally adds _enterprise scope validation_
@@ -86,6 +106,17 @@ The following method:resource scopes are configured:
 To debug this Policy change the logging level to DEBUG in log4j2.xml:
 ```xml
 <AsyncLogger name="org.mule.module.scripting.component.Scriptable" level="DEBUG"/>
+```
+
+Some example debugging log messages follow:
+```
+DEBUG 2017-08-23 16:43:48,295 [[demo-echo].throttling-task.01] org.mule.module.scripting.component.Scriptable: Policy 236386: Access token (granted) scopes: "create demo-netphone-admin read openid auth-columbia"
+DEBUG 2017-08-23 16:43:48,295 [[demo-echo].throttling-task.01] org.mule.module.scripting.component.Scriptable: Policy 236386: Enterprise validation scope alternatives: "auth-columbia | auth-facebook"
+DEBUG 2017-08-23 16:43:48,297 [[demo-echo].throttling-task.01] org.mule.module.scripting.component.Scriptable: Policy 236386: Enterprise groups: "read openid create update auth-columbia delete"
+DEBUG 2017-08-23 16:43:48,297 [[demo-echo].throttling-task.01] org.mule.module.scripting.component.Scriptable: Policy 236386: Enterprise validation results in effective scopes: "read openid auth-columbia create"
+DEBUG 2017-08-23 16:43:48,301 [[demo-echo].throttling-task.01] org.mule.module.scripting.component.Scriptable: Policy 236386: Found a match in the scopeMap for "post:/things" requiring scopes: "create demo-netphone-admin"
+DEBUG 2017-08-23 16:43:48,302 [[demo-echo].throttling-task.01] org.mule.module.scripting.component.Scriptable: Policy 236386: Access Token does not have one or more of the required enterprise scopes: create demo-netphone-admin
+WARN  2017-08-23 16:43:48,329 [[demo-echo].throttling-task.01] org.mule.api.processor.LoggerMessageProcessor: Policy 236386 invalid_scope: Access Token does not have one or more of the required enterprise scopes: create demo-netphone-admin
 ```
 
 ### flowVars added
