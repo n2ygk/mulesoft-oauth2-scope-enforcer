@@ -38,6 +38,9 @@ are present then a 403 Invalid Scope error will be returned.
 This group list will be intersected with the OAuth 2.0 granted scope list to produce the _effective_ scope list
 which will then be tested for scope enforcement.
 
+Enterprise Scope Validation is a workaround for the inability of some (all) currently Mule-supported OAuth 2.0 service
+providers to provide a mechanism to alter the granted scopes.
+
 ### Configuring Method:Resource Scope Enforcement
 Configure the scope enforcement policy by adding method:resource keys and values that are the 
 scopes you want to enforce for the given method:resource.
@@ -48,7 +51,7 @@ The method:resource name is similar to what the MuleSoft APIkit router uses for 
 If you have a common (set of) scope(s) that you want enforced you can
 repeat them here for each table entry, or list them in the prior `OAuth 2.0 protected` policy.
 
-### Configured Method & Resource Conditions
+### Configuring Method & Resource Conditions
 
 As with most newer (Mule 3.8.1+) API Policies, you can limit this Policy to apply only to
 [specific resources and methods](https://docs.mulesoft.com/api-manager/resource-level-policies-about). This is
@@ -57,7 +60,33 @@ methods and resources for which this entire policy is applied. Yes, this is conf
 this feature, just leave it set to "Apply configurations to all API methods & resources". That's probably
 what you want.
 
+### Example Configuration with Enterprise Validation
+
 ![alt-text](apply.png "screen shot of example of applying the custom OAuth 2.0 scope enforcement policy")
+
+This example configuration enables enterprise scope validation whenever either the `auth-columbia`
+or `auth-facebook` scope is present
+by retrieving the `group` attribute, which happens to be the same attribute for both authn/authz
+methods. The scopes in the Access Token are interesected with the scopes in the
+`group` list to become the _effective scopes_. If neither `auth-columbia` nor `auth-facebook` is present
+in the granted scopes, the policy fails.
+
+The following method:resource scopes are configured:
+
+| method:resource | required scopes | explanation |
+|-----------------|-----------------|-------------|
+| `get:/things.*` | `read`          | GET of any resource matching the regex `/things.*` (`/things`, `/things/123`, `/thingsandwidgets`, etc.) requires the `read` scope |
+| `post:/things`   | `create demo-netphone-admin` | POST of a new resource under `/things/` requires both `create` and `demo-netphone-admin` scope |
+| `put:/things/.+`   | `update`        | PUT of any resource like `/things/123` (but not `/things`) requires `update` scope |
+
+
+
+### Configuring Logging
+
+To debug this Policy change the logging level to DEBUG in log4j2.xml:
+```xml
+<AsyncLogger name="org.mule.module.scripting.component.Scriptable" level="DEBUG"/>
+```
 
 ### flowVars added
 As a convenience, this policy also sets the following flowVars for use by subsequent modules in the flow:
@@ -202,8 +231,9 @@ OAuth 2.0 token validation policy, this custom policy **will break** if \_agwTok
 - **Consider this an Alpha test experimental version!**
 
 ### TODO
-- add debug logging configuration option
+- consider refactoring Python into native Mule code
 - Caching of method:url decision for performance
+- add "late binding" of enterprise scopes via LDAP query (or similar) rather than carrying forward the (stale) groups that were valid at the initial authorization code grant.
 
 ## Author
 Alan Crosswell
