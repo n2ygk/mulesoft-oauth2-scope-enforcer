@@ -163,7 +163,6 @@ def doit():
     ret.pyStatus = 503
     ret.pyError = 'policy_misconfigured'
     ret.pyErrorDescription = "request path (%s) doesn't match listener path (%s)."%(requestPath,listenerPath)
-    log.debug('Policy {{policyId}}: ' + ret.pyErrorDescription)
   if requiredScopes:
     flowVars['requiredScopes'] = requiredScopes
     if not set(requiredScopes.split(' ')).issubset(set(scope.split(' '))):
@@ -171,12 +170,11 @@ def doit():
       ret.pyError = 'invalid_scope'
       enterprise = 'enterprise ' if enterpriseScopeAlternates else ''
       ret.pyErrorDescription = 'Access Token does not have one or more of the required %sscopes: %s'%(enterprise,requiredScopes)
-      log.debug('Policy {{policyId}}: ' + ret.pyErrorDescription)
   else: # it's not OK to explicitly configure no requiredScopes.
     ret.pyStatus = 503
     ret.pyError = 'policy_misconfigured'
     ret.pyErrorDescription = 'request path (%s) has no required scopes: Configure Method & Resource conditions.'%requestPath
-    log.debug('Policy {{policyId}}: ' + ret.pyErrorDescription)
+  log.debug('Policy {{policyId}}: %s %s: %s'%(ret.pyStatus,ret.pyError,ret.pyErrorDescription))
   return ret
 
 ret = doit()

@@ -262,6 +262,27 @@ OAuth 2.0 token validation policy, this custom policy **will break** if \_agwTok
 - **Consider this an Alpha test experimental version!**
 
 ### TODO
+- Major item: Parse the RAML to get the required scopes and alternatives allowed by `securedBy`. For example:
+  ```
+  /things:
+    get:
+      securedBy:
+        - oauth_2_0_auth_columbia: { scopes: [ auth-columbia, read ] }
+        - oauth_2_0_auth_google: { scopes: [ auth-google ] }
+        - oauth_2_0_other
+  ```
+  Is it allowable to use the same securityScheme but with different overrides:
+  ```
+  /things:
+    get:
+      securedBy:
+        - oauth_2_0: { scopes: [ auth-columbia, read ] }
+        - oauth_2_0: { scopes: [ auth-google, read ] }
+        - oauth_2_0: { scopes: [ read ] }
+  ```
+
+  Figure out how this maps to enterprise scope validation, how to choose from among the alternatives, etc.
+  - Where is the RAML? Can we just paste relevant snippets or an HREF into the config rather than keyvalues?
 - consider refactoring Python into native Mule code
 - Caching of method:url decision for performance
 - add "late binding" of enterprise scopes via LDAP query (or similar) rather than carrying forward the (stale) groups that were valid at the initial authorization code grant.
