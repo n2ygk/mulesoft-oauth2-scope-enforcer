@@ -8,6 +8,10 @@ import re
 import yaml
 from pprint import pprint
 import logging
+from optparse import OptionParser
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
 
 log = logging.getLogger()
 if not log.handlers:
@@ -15,7 +19,6 @@ if not log.handlers:
   formatter = logging.Formatter('%(levelname)-5s %(asctime)s %(message)s')
   handler.setFormatter(formatter)
   log.addHandler(handler)
-log.setLevel(logging.DEBUG)
 
 httpVerbs = ['get','post','put','update','patch','delete']
 
@@ -65,6 +68,7 @@ def jsonParseRoot(j):
   Parse root of document for securitySchemes definition and root securedBy
   """
   global rootScopes
+
   # document root securitySchemes definition
   if 'securitySchemes' in j:
     securitySchemes(j['securitySchemes'])
@@ -103,16 +107,9 @@ def jsonParseResource(j,resource,mustacheMap):
       log.debug('ignoring type %s'%type(m))
   return mustacheMap
 
-def ramlParse(s):
-  mustacheMap = {}
-  y = yaml.load(s.replace('!','')) # temporarily just ignore the !includes and so on
-  #pprint(y)
-  jsonParseRoot(y)
-  return jsonParseResource(y,'',mustacheMap)
-
 
 ### pull in from a URL
-ramlString = """
+debugRamlString = """
 #%RAML 1.0  
 title: demo-echo
 version: v1
@@ -261,5 +258,65 @@ securedBy:
                 schema: Thing
 """
 
-m = ramlParse(ramlString)
+# example root RAML is https://localhost:8082/v1/console/api/?raml
+# and !include oauth2-ping.raml is https://localhost:8082/v1/console/api/oauth2-ping.raml
+
+class RamlUrl:
+  def __init__(self,url):
+    self.url = url
+    i = self.url.find('?raml')
+    self.baseUrl = url[:i] if i > 0 else url
+    if self.baseUrl[-1] != '/':
+      self.baseUrl = self.baseUrl + '/' 
+    yaml.add_constructor("!include", self.yaml_include)
+    requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+    logging.getLogger("requests").setLevel(logging.WARNING)
+
+  def yaml_include(self, loader, node):
+    log.debug('loading node %s'%node.value)
+    response = requests.get(url=self.baseUrl+node.value,verify=False)
+    if response.status_code == 200:
+      return yaml.load(response.text)
+    else:
+      log.warn('HTTP request status %s: %s'%(response.status_code,response.reason))
+      return None
+
+  def load(self):
+    log.debug('loading root node %s'%self.url)
+    response = requests.get(url=self.url,verify=False)
+    if response.status_code == 200:
+      return yaml.load(response.text)
+    else:
+      log.warn('HTTP request status %s: %s'%(response.status_code,response.reason))
+      return None
+  
+
+URL = 'https://localhost:8082/v1/console/api/?raml'
+usage = '%%prog [options] [URL]\nURL is a RAML API definition [default: %s]'%URL
+parser = OptionParser(usage=usage)
+parser.add_option('-l','--loglevel',
+                  type='string',
+                  default='DEBUG',
+                  help='log level [default: %default]')
+parser.add_option('-d','--debug',
+                  action = 'store_true',
+                  help='debug with built-in RAML string')
+(options,args) = parser.parse_args()
+
+log.setLevel(options.loglevel)
+
+if len(args) == 1:
+  URL = args[0]
+elif len(args) > 1:
+  parser.print_help()
+  exit(1)
+
+if options.debug:
+  y = yaml.load(debugRamlString)
+else:
+  y = RamlUrl(URL).load()
+
+jsonParseRoot(y)
+mustacheMap = {}
+m = jsonParseResource(y,'',mustacheMap)
 print(json.dumps(m))
