@@ -59,12 +59,17 @@ configuration:
     optional: true
     allowMultiple: true
 # start by just pasting the RAML in. Later, get it from a URL.
-  - propertyName: ramlString
-    name: RAML
-    description: |
-      API RAML document content that contains resource & method securedBy OAuth2.0 scopes.
-      This replaces the prior policy version's "Method:resource and required scopes"
-    sensitive: false
+  # - propertyName: ramlString
+  #   name: RAML
+  #   description: |
+  #     API RAML document content that contains resource & method securedBy OAuth2.0 scopes.
+  #     This replaces the prior policy version's "Method:resource and required scopes"
+  #   sensitive: false
+  #   type: string
+  #   optional: true
+  #   allowMultiple: false
+  - propertyName: scopeMap
+    name: scopeMap
     type: string
     optional: true
     allowMultiple: false
