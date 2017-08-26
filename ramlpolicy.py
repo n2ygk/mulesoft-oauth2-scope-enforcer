@@ -49,7 +49,9 @@ def securedBy(schemes): # the scheme name can be a string or a map key
     log.warn('RAML parse error: securedBy expects a list')
     return sl
   for s in schemes:
-    if isinstance(s,str): # if the node is terminal then no overriding scopes
+    if s == None:
+      log.warn('RAML non-OAuth 2.0 (null) security scheme')
+    elif isinstance(s,str): # if the node is terminal then no overriding scopes
       if s in oauth2Scopes:
         sl.append(oauth2Scopes[s]) # use the defaults for this scheme name
     else: # there _might_ be an override
@@ -62,6 +64,11 @@ def securedBy(schemes): # the scheme name can be a string or a map key
   return sl
 
 rootScopes = []
+
+def jsonParse(j):
+  mustacheMap = {}
+  jsonParseRoot(j)
+  return jsonParseResource(j,'',mustacheMap)
 
 def jsonParseRoot(j):
   """
@@ -107,8 +114,6 @@ def jsonParseResource(j,resource,mustacheMap):
       log.debug('ignoring type %s'%type(m))
   return mustacheMap
 
-
-### pull in from a URL
 debugRamlString = """
 #%RAML 1.0  
 title: demo-echo
@@ -166,7 +171,37 @@ securitySchemes:
       - auth-twitter
       - auth-windowslive
 types:
-  Thing: !include thingType.raml
+  Thing: 
+    type: object
+    properties:
+      authorization:
+        type: string
+      user: 
+        type: string
+      tokenContext: 
+        type: string
+      groups: 
+        type: string
+      scopes:
+        type: string
+      client_id:
+        type: string
+      client_name:
+        type: string
+      http_method:
+        type: string
+      http_request_uri:
+        type: string
+    example:
+      authorization: Bearer abcdefghi123456
+      user: fred@columbia.edu
+      tokenContext: foo bar
+      groups: g1 g2demo-echo
+      scopes: a b c
+      client_id: 64575d23b8504c9bb1e9e7ff558c3cd3
+      client_name: another authz demo app
+      http_method: GET
+      http_request_uri: /v1/api/things
 # default top-level securedBy.
 # Due to an APIkit bug that requires enumerating all possible scopes, you need to always
 # override the scopes or end up with an impossible scope list.
@@ -316,7 +351,5 @@ if options.debug:
 else:
   y = RamlUrl(URL).load()
 
-jsonParseRoot(y)
-mustacheMap = {}
-m = jsonParseResource(y,'',mustacheMap)
+m = jsonParse(y)
 print(json.dumps(m))
