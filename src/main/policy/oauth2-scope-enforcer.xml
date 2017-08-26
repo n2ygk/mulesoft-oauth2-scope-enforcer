@@ -25,9 +25,9 @@
    xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
    xmlns:api-platform-gw="http://www.mulesoft.org/schema/mule/api-platform-gw"
    xsi:schemaLocation="http://www.mulesoft.org/schema/mule/policy http://www.mulesoft.org/schema/mule/policy/current/mule-policy.xsd
-		       http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-		       http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
-		       http://www.mulesoft.org/schema/mule/api-platform-gw http://www.mulesoft.org/schema/mule/api-platform-gw/current/mule-api-platform-gw.xsd">
+                       http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+                       http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+                       http://www.mulesoft.org/schema/mule/api-platform-gw http://www.mulesoft.org/schema/mule/api-platform-gw/current/mule-api-platform-gw.xsd">
 
   <!-- Apply configurations to specific methods & resources: A pointcut for each configured condition. -->
   {{#pointcutData}}
@@ -55,6 +55,9 @@
       <scripting:script engine="jython"><![CDATA[
 import json
 import re
+from HTMLParser import HTMLParser
+
+httpVerbs = ['get','post','put','update','patch','delete']
 
 def doit():
   class ret:
@@ -70,15 +73,15 @@ def doit():
 
   enterpriseScopeAlternates = set([k for k in enterpriseValidation])
 
-  mustacheMap = {
-  {{#scopeMap}}
-    '{{ key }}': '{{ value }}',
-  {{/scopeMap}}
-  }
+  # Version 1.x of this policy used keyvalues configuration of the scopeMap variable.
+  # Version 2.x pastes a JSON document into a string but retains the old keyvalues structure (for now).
+
+  _s = '{{ scopeMap }}'
+  mustacheMap = json.loads(HTMLParser().unescape(_s))
 
   scopeMap = {}
-  verbs = ['get','post','put','update','patch','delete']
 
+  log.debug('Policy {{policyId}}: ScopeMap:')
   for key,value in mustacheMap.items():
     try:
       verb,resource=key.split(':')
@@ -87,14 +90,15 @@ def doit():
       return ret
     if resource[-1] != '$': # force a complete match
       resource = resource + '$'
-    if verb not in verbs:
-      ret.pyErrorDescription = 'method (%s) must be one of: %s'%(verb,', '.join(verbs))
+    if verb not in httpVerbs:
+      ret.pyErrorDescription = 'method (%s) must be one of: %s'%(verb,', '.join(httpVerbs))
       return ret
     scopeMap[key] = {
       'verb': verb,
-      'scope': value,
+      'scopes': value, # a list of lists of alternate scopes [['scope1',...,'scopeN'],...,['alt1',...,'altN']]
       're': re.compile(resource)
     }
+    log.debug('Policy {{policyId}}: %s:%s %s'%(verb,resource,value))
 
   if '_agwTokenContext' in flowVars:
     map = json.loads(flowVars['_agwTokenContext']) # dig the scope list out of the JSON map:
@@ -119,8 +123,8 @@ def doit():
     groupAttr = None
     for e in enterpriseValidation:
       if e in scopeList:
-	groupAttr = enterpriseValidation[e]
-	break
+        groupAttr = enterpriseValidation[e]
+        break
     if groupAttr and 'access_token' in map and groupAttr in map['access_token']:
       groups = map['access_token'][groupAttr]
       effective_scopelist = set(scopeList).intersection(set(groups.split(' ')))
@@ -136,7 +140,7 @@ def doit():
       return ret
   else:
     log.debug('Policy 236375: No enterprise validation scope alternatives.')
-  flowVars['scope'] = scope # expose the scope to downstream app
+  flowVars['scope'] = scope # expose the scopes to downstream app
   # look for configured required scopes for this method and resource:
   # strip the listener path out of the URL
   #    http.listener.path=/v1/api/*
@@ -144,32 +148,39 @@ def doit():
   listenerPath = message.getInboundProperty('http.listener.path')
   method = message.getInboundProperty('http.method').lower()
   requestPath = message.getInboundProperty('http.request.path')
-  requiredScopes = ''
+  requiredScopes = []
   # search for a match. If none found, default to fail closed.
   ret.pyStatus = 503
   ret.pyError = 'policy_misconfigured'
   ret.pyErrorDescription = 'No configured matching method:resource'
   if requestPath.find(listenerPath[:-2]) == 0: # remove the '/*'
-    resource = requestPath[len(listenerPath)-2:].replace('/','&#x2F;') # they HTML-quote the '/'
+    resource = requestPath[len(listenerPath)-2:]
     for k,v in scopeMap.items():
       if v['verb'] == method and v['re'].match(resource):
-	requiredScopes = v['scope']
-	ret.pyStatus = 200
-	ret.pyError = 'OK'
-	ret.pyErrorDescription = 'OK'
-	log.debug('Policy {{policyId}}: Found a match in the scopeMap for "%s:%s" requiring scopes: "%s"'%(method,resource.replace('&#x2F;','/'),requiredScopes))
-	break
+        requiredScopes = v['scopes'] # a list of alternative lists
+        ret.pyStatus = 200
+        ret.pyError = 'OK'
+        ret.pyErrorDescription = 'OK'
+        log.debug('Policy {{policyId}}: Found a match in the scopeMap for "%s:%s" requiring scopes: "%s"'%(method,resource,requiredScopes))
+        break
   else:
     ret.pyStatus = 503
     ret.pyError = 'policy_misconfigured'
     ret.pyErrorDescription = "request path (%s) doesn't match listener path (%s)."%(requestPath,listenerPath)
   if requiredScopes:
     flowVars['requiredScopes'] = requiredScopes
-    if not set(requiredScopes.split(' ')).issubset(set(scope.split(' '))):
-      ret.pyStatus = 403
-      ret.pyError = 'invalid_scope'
-      enterprise = 'enterprise ' if enterpriseScopeAlternates else ''
-      ret.pyErrorDescription = 'Access Token does not have one or more of the required %sscopes: %s'%(enterprise,requiredScopes)
+    # find any matching required scope list from the alternatives offered
+    for r in requiredScopes:
+      if set(r).issubset(set(scope.split(' '))):
+	ret.pyStatus = 200
+	ret.pyError = 'OK'
+	ret.pyErrorDescription = 'OK'
+	log.debug('Policy {{policyId}}: %s %s: %s'%(ret.pyStatus,ret.pyError,ret.pyErrorDescription))
+        return ret
+    ret.pyStatus = 403
+    ret.pyError = 'invalid_scope'
+    enterprise = 'enterprise ' if enterpriseScopeAlternates else ''
+    ret.pyErrorDescription = 'Access Token does not have one or more of the required %sscopes: %s'%(enterprise,requiredScopes)
   else: # it's not OK to explicitly configure no requiredScopes.
     ret.pyStatus = 503
     ret.pyError = 'policy_misconfigured'

@@ -48,3 +48,4 @@ target/
 src/main/api/.repository/
 *~
 mule-policy.xml
+*.pyc
