@@ -101,21 +101,22 @@ based on parsing the application's RAML API document:
 
 ```
 {
- "post:/things": [["auth-columbia", "demo-netphone-admin", "openid", "create"],
-				  ["auth-google"],
-				  ["auth-facebook"]],
- "put:/things/.+": [["auth-columbia", "openid", "update"]],
- "get:/things": [["auth-columbia", "openid", "read"],
-				 ["auth-google", "openid", "read"],
-				 ["auth-facebook", "openid", "read"]],
- "get:/things/.+": [["openid", "read"]],
- "get:/things/.+/foo": []
+  "post:/things": [["auth-columbia", "demo-netphone-admin", "create"],
+                   ["auth-google", "create"],
+                   ["auth-facebook", "create"]],
+  "put:/things/.+": [["auth-columbia", "update"]],
+  "get:/things": [["auth-columbia", "read"],
+                  ["auth-google", "read"],
+                  ["auth-facebook", "read"]],
+  "get:/things/.+": [["read"]],
+  "get:/things/.+/foo": []
 }
 ```
 
 You'll note that a POST to /things will succeed if the effective scopes matching any of the mutually
 exclusive choices shown. The idea is to use the `auth-*` scope selectors which identify which identity
-provider is used by the Authorization Code grant.
+provider is used by the Authorization Code grant. Also note that the "get:/things/.+" scope doesn't require
+any enterprise validation. That's allowed but is a non-sensical example.
 
 Note that if you are using a Client Credentials grant, there is no user identified and this policy will fail
 if enterprise scopes are configured. This can be a good mechanism to require a given API to use Authorization
@@ -207,20 +208,22 @@ PUT /things/{id} requires the `update` scope.
 The following are notes for developers of this Policy.
 
 The end game is to pass in a URL to the RAML description and then parse the RAML to find the securedBy
-and cache this into a map Later, but consider that the `securedBy` is a list
-of scopes that are _allowed_ and not necessarily _required_; there may be no way to identify which
-ones to use; RAML is unclear about the semantics of OAuth 2.0 scopes.
+and cache this into a map later. The current implementation develops that map offline and pastes it in
+to the configration.
 
-To start, just use a mustache-templated keyvalues map of `{"method:resource": "scopes"}`.
-See [oauth2-scope-enforcer.yaml](src/main/policy/oauth2-scope-enforcer.yaml) for an example
-of specifying a keyvalues configuration property and
-[oauth2-scope-enforcer.xml](src/main/policy/oauth2-scope-enforcer.xml) for an example
-use of iterating over a map using `{{#map}} ... {{/map}}`.
+There was some confusion around whether all the scopes in a `securedBy` are _required_ for the
+the method to be allowed to execute. This has been clarified as being the case although the
+[RAML 1.0 spec](https://github.com/raml-org/raml-spec/blob/master/versions/raml-10/raml-10.md#applying-security-schemes
+language is (was) unclear on this. See [this issue](https://github.com/raml-org/raml-spec/issues/557#issuecomment-323615958).
 
 The RAML can be found at `/console/api/?raml` if the APIkit console is enabled
-or in the API Developer Portal (subject to permissions TBD):
+or in the API Developer Portal (subject to permissions TBD).
 
-![alt-text](developer-portal.raml.png "screen shot of developer portal showing ROOT RAML URL")
+Developer workflow:
+
+1. Run the API app in Anypoint Studio
+2. ./ramlpolicy.py
+3. Cut the output and paste into the policy configuration.
 
 Example inbound scoped properties for `PUT /v1/api/things/123` which belongs to the APIkit flow named
 `put:/things/{id}:api-config`:
@@ -247,7 +250,10 @@ breaks things as we need the flowVars created by the upstream `OAuth 2.0 protect
 
 Since it's hard to debug Python Code in the MuleSoft Jython world, use [test.py](./test.py) as a simple test harness:
 Copy the configured Python code from the relevant XML file in `~/AnypointStudio/workspace/.mule/policies/` and
-append it to test.py.
+append it to test.py. You can see the name of the applied policy in the Console log, for example:
+```
+INFO  2017-08-28 11:56:27,479 [agw-policy-notifier.01] com.mulesoft.module.policies.lifecyle.PolicyRegistryLifecycleManager: Policy 25246-236386.xml was correctly applied
+```
 
 ### Inconsistency across Mule implementations of OAuth 2.0
 
@@ -277,9 +283,6 @@ I've also seen these flowVars:
 So, I conclude that the “standard” is what’s used for OpenAM and PingFederate. If you are using some other
 OAuth 2.0 token validation policy, this custom policy **will break** if \_agwTokenContext is not present.
 
-
-### CAVEATS
-- **Consider this an Alpha test experimental version!**
 
 ### TODO
 - consider refactoring Python into native Mule code

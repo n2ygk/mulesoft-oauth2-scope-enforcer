@@ -36,19 +36,20 @@ description: >-
 
   **Configuring resource and method required scopes**
 
-  Paste a JSON policy document as produced by [ramlpolicy.py](https://github.com/n2ygk/mulesoft-oauth2-scope-enforcer/blob/v2/ramlpolicy.py)
+  Paste a JSON policy document as produced by
+  [ramlpolicy.py](https://github.com/n2ygk/mulesoft-oauth2-scope-enforcer/blob/master/ramlpolicy.py)
   (which parses the API's RAML file) or create one manually. Here's an example:
 
   ```{
-   "post:/things": [["auth-columbia", "demo-netphone-admin", "openid", "create"],
-                    ["auth-google"],
-                    ["auth-facebook"]],
-   "put:/things/.+": [["auth-columbia", "openid", "update"]],
-   "get:/things": [["auth-columbia", "openid", "read"],
-                   ["auth-google", "openid", "read"],
-                   ["auth-facebook", "openid", "read"]],
-   "get:/things/.+": [["openid", "read"]],
-   "get:/things/.+/foo": []
+  "post:/things": [["auth-columbia", "demo-netphone-admin", "create"],
+                   ["auth-google", "create"],
+                   ["auth-facebook", "create"]],
+  "put:/things/.+": [["auth-columbia", "update"]],
+  "get:/things": [["auth-columbia", "read"],
+                  ["auth-google", "read"],
+                  ["auth-facebook", "read"]],
+  "get:/things/.+": [["read"]],
+  "get:/things/.+/foo": []
   }```
 
   The keys are the method:resource regex pattern and the values are lists of alternative lists of scopes that must be present.
