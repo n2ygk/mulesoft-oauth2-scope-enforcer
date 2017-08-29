@@ -285,6 +285,7 @@ OAuth 2.0 token validation policy, this custom policy **will break** if \_agwTok
 
 
 ### TODO
+- Add a "wildcard" enterprise scope validation which allows for securedBy scopes that explicitly do not include one of the required alternatives. Or just change the enterprise scope part to not care if one isn't present? This is basically to allow Client Credentials or Authorization Code....
 - consider refactoring Python into native Mule code
 - Caching of method:url decision for performance
 - add "late binding" of enterprise scopes via LDAP query (or similar) rather than carrying forward the (stale) groups that were valid at the initial authorization code grant.
