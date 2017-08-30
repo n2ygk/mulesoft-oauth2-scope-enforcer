@@ -61,6 +61,10 @@ which will then be tested for scope enforcement.
 Enterprise Scope Validation is a workaround for the inability of some (all) currently Mule-supported OAuth 2.0 service
 providers to provide a mechanism to alter the granted scopes.
 
+As a special case, the `auth-none` scope explicitly identifies that enterprise scope validation is not required (e.g.
+when one of your resource's methods is OK with a Client Credentials grant). Note that your OAuth 2.0 server must have
+the `auth-none` scope defined for this to work.
+
 ### Configuring resource and method required scopes
 
 Paste a JSON policy document as produced by [ramlpolicy.py](./ramlpolicy.py)
@@ -165,17 +169,16 @@ Upon success it sets a 200 status and flow continues to the Mule app.
 
 ## Why this custom policy is required
 
-The reason this custom policy is needed is that the MuleSoft standard policies currently only 
-implement _global_ checking for
-a static list of required scopes (which they misidentify as _supported scopes_) rather than allowing for
-different required scopes for each specific method and resource as shown here:
+The standard policy scope list checking for the entire API (or
+some subset of [resource-level](https://docs.mulesoft.com/api-manager/resource-level-policies-about)
+regexps) is cumbersome to configure when
+different resource and methods require different scopes. One must
+apply the same resource-level policy over-and-over, customizing each
+time for different methods, resources and scopes. And, this doesn’t guarantee compliance with
+the RAML securedBy scopes nor offer a means of implementing
+alternative securitySchemes in the securedBy _list_. This policy does that all in one fell swoop
+based on parsing the RAML. It also add the enterprise validation feature, which, admittedly is weird.
 
-![alt-text](global-scope-enforcement.png "screen shot of example of global scope enforcement policy")
-
-One must provide a single list of scopes and can optionally indicate which resource pattern(s) and
-method(s) to apply that scope to. However, RAML (and OpenAPI/Swagger) is (are)
-much more expressive and typically would use
-_different_ scopes for various resources and methods in an API:
 
 ```
 #%RAML 1.0
@@ -285,7 +288,6 @@ OAuth 2.0 token validation policy, this custom policy **will break** if \_agwTok
 
 
 ### TODO
-- Add a "wildcard" enterprise scope validation which allows for securedBy scopes that explicitly do not include one of the required alternatives. Or just change the enterprise scope part to not care if one isn't present? This is basically to allow Client Credentials or Authorization Code....
 - consider refactoring Python into native Mule code
 - Caching of method:url decision for performance
 - add "late binding" of enterprise scopes via LDAP query (or similar) rather than carrying forward the (stale) groups that were valid at the initial authorization code grant.

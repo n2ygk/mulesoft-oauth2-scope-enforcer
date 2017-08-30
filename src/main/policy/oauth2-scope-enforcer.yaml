@@ -38,21 +38,8 @@ description: >-
 
   Paste a JSON policy document as produced by
   [ramlpolicy.py](https://github.com/n2ygk/mulesoft-oauth2-scope-enforcer/blob/master/ramlpolicy.py)
-  (which parses the API's RAML file) or create one manually. Here's an example:
-
-  ```{
-  "post:/things": [["auth-columbia", "demo-netphone-admin", "create"],
-                   ["auth-google", "create"],
-                   ["auth-facebook", "create"]],
-  "put:/things/.+": [["auth-columbia", "update"]],
-  "get:/things": [["auth-columbia", "read"],
-                  ["auth-google", "read"],
-                  ["auth-facebook", "read"]],
-  "get:/things/.+": [["read"]],
-  "get:/things/.+/foo": []
-  }```
-
-  The keys are the method:resource regex pattern and the values are lists of alternative lists of scopes that must be present.
+  (which parses the API's RAML file) or create one manually. The key is the method:resource regex pattern
+  and the value is a list of alternative lists of scopes that must be present.
 
   **flowVars**
 

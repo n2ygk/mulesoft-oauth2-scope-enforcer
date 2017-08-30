@@ -121,11 +121,14 @@ def doit():
       log.debug('Policy {{policyId}}: No enterprise validation scope alternatives found in the granted scopes.')
       return ret
     groupAttr = None
+    skipValidation = False
     for e in enterpriseValidation:
       if e in scopeList:
-        groupAttr = enterpriseValidation[e]
+        groupAttr = enterpriseValidation[e] if e != 'auth-none' else ' SKIP '
         break
-    if groupAttr and 'access_token' in map and groupAttr in map['access_token']:
+    if groupAttr == ' SKIP ':
+      log.debug('Policy {{policyId}}: auth-none scope: skipping enterprise validation.')
+    elif groupAttr and 'access_token' in map and groupAttr in map['access_token']:
       groups = map['access_token'][groupAttr]
       effective_scopelist = set(scopeList).intersection(set(groups.split(' ')))
       effective_scope = ' '.join(effective_scopelist)
@@ -139,7 +142,7 @@ def doit():
       log.debug('Policy {{policyId}}: Group attr "%s" is not found in the access token.')
       return ret
   else:
-    log.debug('Policy 236375: No enterprise validation scope alternatives.')
+    log.debug('Policy {{policyId}}: No enterprise validation scope alternatives.')
   flowVars['scope'] = scope # expose the scopes to downstream app
   # look for configured required scopes for this method and resource:
   # strip the listener path out of the URL
