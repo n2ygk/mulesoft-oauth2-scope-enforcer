@@ -177,7 +177,7 @@ apply the same resource-level policy over-and-over, customizing each
 time for different methods, resources and scopes. And, this doesn’t guarantee compliance with
 the RAML securedBy scopes nor offer a means of implementing
 alternative securitySchemes in the securedBy _list_. This policy does that all in one fell swoop
-based on parsing the RAML. It also add the enterprise validation feature, which, admittedly is weird.
+based on parsing the RAML. It also adds the enterprise validation feature which, admittedly, is weird.
 
 
 ```

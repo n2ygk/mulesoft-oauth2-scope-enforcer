@@ -2,6 +2,7 @@
 """
 ramlpolicy: Parse an API's RAML and generate a compact table for inclusion in the
 API Manager custom OAuth 2.0 scope enforcement policy.
+Looks for securedBy:
 """
 import json
 import re
