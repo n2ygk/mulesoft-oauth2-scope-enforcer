@@ -55,8 +55,18 @@ function RamlParse(raml) {
     promise.then((json) => { JsonGenerate(json) });
 }
 
-RamlParse('t/api.raml');
-// this fails, likely due to the self-signed cert.
-//RamlParse('https://localhost:8082/v1/console/api/?raml');
+// Pulling RAML from Anypoint Studio fails due to the self-signed cert, so ignore the error:
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+var defaultUrl = 'https://localhost:8082/v1/console/api/?raml' 
+var url = defaultUrl;
+
+if (process.argv[2] == '-h' || process.argv[2] == '--help') {
+    console.log('Usage: ' + process.argv[1] + ' [raml URL] (default ' + defaultUrl + ')');
+} else {
+    if (process.argv.length == 3) {
+	url = process.argv[2];
+    }
+    RamlParse(url);
+}
 
 
