@@ -49,3 +49,4 @@ src/main/api/.repository/
 *~
 mule-policy.xml
 *.pyc
+node_modules
