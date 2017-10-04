@@ -171,6 +171,7 @@ def doit():
     ret.pyStatus = 503
     ret.pyError = 'policy_misconfigured'
     ret.pyErrorDescription = "request path (%s) doesn't match listener path (%s)."%(requestPath,listenerPath)
+  log.debug('Policy {{policyId}}: Checking if provided and required scopes match: requiredScopes is: "%s"; scopeList is: "%s"'%(requiredScopes,scopeList))
   if requiredScopes:
     flowVars['requiredScopes'] = requiredScopes
     # find any matching required scope list from the alternatives offered
