@@ -174,7 +174,7 @@ def doit():
     flowVars['requiredScopes'] = requiredScopes
     # find any matching required scope list from the alternatives offered
     for r in requiredScopes:
-      if set(r).issubset(set(scope.split(' '))):
+      if set(r).issubset(set(scopeList)):
 	ret.pyStatus = 200
 	ret.pyError = 'OK'
 	ret.pyErrorDescription = 'OK'
