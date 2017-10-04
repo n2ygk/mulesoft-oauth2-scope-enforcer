@@ -110,7 +110,8 @@ def doit():
     return ret
   scope = map['scope'] if 'scope' in map else ''
   log.debug('Policy {{policyId}}: Access token (granted) scopes: "%s"'%scope)
-  scopeList = scope.split(' ') if scope is str else scope
+  scopeList = scope.split(' ') if isinstance(scope, basestring) else scope
+  scopeList = [scopeList] if isinstance(scopeList, basestring) else scopeList # ensure scopeList is a list
   # do enterprise scope validation. If any alternates configured, at least one must be in the scopeList
   if enterpriseScopeAlternates:
     log.debug('Policy {{policyId}}: Enterprise validation scope alternatives: "%s"'%' | '.join([k for k in enterpriseValidation]))
