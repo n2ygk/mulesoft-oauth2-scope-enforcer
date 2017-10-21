@@ -7,12 +7,12 @@ const {RamlJsonGenerator} = require('raml-json-enhance-node'); // https://github
 //  "post:/things/?": [["auth-columbia", "demo-netphone-admin", "create"],
 //                   ["auth-google", "create"],
 //                   ["auth-facebook", "create"]],
-//  "put:/things/.+/?": [["auth-columbia", "update"]],
+//  "put:/things/[^/]+/?": [["auth-columbia", "update"]],
 //  "get:/things/?": [["auth-columbia", "read"],
 //                  ["auth-google", "read"],
 //                  ["auth-facebook", "read"]],
-//  "get:/things/.+/?": [["read"]],
-//  "get:/things/.+/foo/?": []
+//  "get:/things/[^/]+/?": [["read"]],
+//  "get:/things/[^/]+/foo/?": []
 //}
 //
 // Alan Crosswell
@@ -29,28 +29,41 @@ const {RamlJsonGenerator} = require('raml-json-enhance-node'); // https://github
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+const debug = false;
+
 var scopeMap = {};
 // recursively descend the resource tree and add entries to the scopeMap
 function Resource(resource) {
     var resPath = resource['parentUrl']+resource['relativeUri'];
     var methods = resource['methods']
+    if (debug) console.error('Resource('+resource['parentUrl']+resource['relativeUri']+')');
     for (var m in methods) {
 	var method = methods[m]['method']
 	var securedBy = methods[m]['securedBy'];
 	var re = /\{.+\}/g;	// e.g. "/widgets/{id}"
-	var key = method + ':' + resPath.replace(re, '.+') + '/?';
+	var key = method + ':' + resPath.replace(re, '[^/]+') + '/?';
+	if (debug) console.error('  method: '+key);
 	scopeMap[key] = [];
 	for (var s in securedBy) {
 	    var scopes = securedBy[s]['settings']['scopes'];
 	    var type = securedBy[s]['type'];
+	    if (debug) console.error('    securedBy scopes '+scopes);
 	    if (type == 'OAuth 2.0') {
 		scopeMap[key].push(scopes);
 	    }
 	}
     }
-    children = resource['resources'];
-    for (var i in children) {
-	Resource(children[i]);
+    if (debug) {
+	console.error('typeof resource is '+typeof resource);
+	for (var r in resource) {
+	    console.error('resource['+r+'] = '+resource[r]);
+	}
+    }
+    if ('resources' in resource) {
+	children = resource['resources'];
+	for (var i in children) {
+	    Resource(children[i]);
+	}
     }
 }
 
@@ -59,6 +72,7 @@ function JsonGenerate(rootJson) {
     //console.log(rootJson['resources'][0]['methods'][0]['securedBy'][0]['settings']['scopes'])
 
     for (var i in rootJson['resources']) {
+	if (debug) console.error('top resource  '+i+': '+rootJson['resources'][i]);
 	resource = rootJson['resources'][i];
 	Resource(resource);
     }

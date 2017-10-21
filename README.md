@@ -335,10 +335,6 @@ OAuth 2.0 token validation policy, this custom policy **will break** if \_agwTok
 
 
 ### TODO
-- Fix ramlpolicy.js incorrect wildcard overmatching of URI parameters:
-  ".+/?" should be "[^/]+/?
-  get:/widgets/5b4d5eaf-bfc9-4142-b338-493f4a4de05a/relationships/locations matches on get:/widgets/?/.+/?$
-- Figure out why ramlpolicy.js blows up on demo-jsonapi example RAML.
 - consider refactoring Python into native Mule code
 - Caching of method:url decision for performance
 - add "late binding" of enterprise scopes via LDAP query (or similar) rather than carrying forward the (stale) groups that were valid at the initial authorization code grant.
