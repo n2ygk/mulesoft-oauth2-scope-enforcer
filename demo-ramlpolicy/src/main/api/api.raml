@@ -1,0 +1,25 @@
+#%RAML 1.0
+title: demo
+version: v1
+baseUri: https://demo.com/{version}
+securitySchemes:
+  oauth_2_0: !include oauth2.raml
+
+/things:
+  get:
+    securedBy:
+      - oauth_2_0: { scopes: [ auth-columbia, read ] }                                              
+      - oauth_2_0: { scopes: [ auth-google, read ] }                                              
+      - oauth_2_0: { scopes: [ auth-none, read ] }                                              
+  post:
+    securedBy:
+      - oauth_2_0: { scopes: [ auth-columbia, demo-netphone-admin, create ] }                                            
+  /{id}:
+    get:
+    securedBy:
+      - oauth_2_0: { scopes: [ read ] }                                                                                     
+    put:                                                                                                    
+      securedBy:                                                                                            
+        - oauth_2_0: { scopes: [ auth-columbia, update ] }
+    /foo:
+      get:  

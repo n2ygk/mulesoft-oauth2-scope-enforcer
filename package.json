@@ -1,6 +1,6 @@
 {
   "name": "mulesoft-oauth2-scope-enforcer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MuleSoft custom API gateway OAuth 2.0 scope enforcement policy",
   "main": "ramlpolicy.js",
   "scripts": {
@@ -11,7 +11,7 @@
     "url": "git+https://github.com/n2ygk/mulesoft-oauth2-scope-enforcer.git"
   },
   "author": "Alan Crosswell <alan@columbia.edu>",
-  "license": "Apache 2.0",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/n2ygk/mulesoft-oauth2-scope-enforcer/issues"
   },
