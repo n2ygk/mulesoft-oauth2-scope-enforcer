@@ -202,6 +202,8 @@ As a convenience, this policy also sets the following flowVars for use by subseq
 
 This policy throws the following errors and in general "fails closed" which prevents inadvertent unprotected access.
 Upon success it sets a 200 status and flow continues to the Mule app.
+If a request is received for an undefined resource in the scopeMap then a warning is logged indicating this could be a configuration error and the flow continues to the Mule app so a 404 Not Found response can be produced by APIKit.
+If a request is received for a defined resource and undefined method in the scopeMap then a warning is logged indicating this could be a configuration error and the flow continues to the Mule app so a 405 Method Not Allowed response can be produced by APIKit.
 
 | Status | Error Code           | Error Description              | Possible causes         |
 |:------:|----------------------|--------------------------------|-------------------------|
