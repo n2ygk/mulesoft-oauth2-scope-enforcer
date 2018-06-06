@@ -110,7 +110,8 @@ def doit():
     return ret
   scope = map['scope'] if 'scope' in map else ''
   log.debug('Policy {{policyId}}: Access token (granted) scopes: "%s"'%scope)
-  scopeList = scope.split(' ')
+  scopeList = scope.split(' ') if isinstance(scope, basestring) else scope
+  scopeList = [scopeList] if isinstance(scopeList, basestring) else scopeList # ensure scopeList is a list
   # do enterprise scope validation. If any alternates configured, at least one must be in the scopeList
   if enterpriseScopeAlternates:
     log.debug('Policy {{policyId}}: Enterprise validation scope alternatives: "%s"'%' | '.join([k for k in enterpriseValidation]))
@@ -170,11 +171,12 @@ def doit():
     ret.pyStatus = 503
     ret.pyError = 'policy_misconfigured'
     ret.pyErrorDescription = "request path (%s) doesn't match listener path (%s)."%(requestPath,listenerPath)
+  log.debug('Policy {{policyId}}: Checking if provided and required scopes match: requiredScopes is: "%s"; scopeList is: "%s"'%(requiredScopes,scopeList))
   if requiredScopes:
     flowVars['requiredScopes'] = requiredScopes
     # find any matching required scope list from the alternatives offered
     for r in requiredScopes:
-      if set(r).issubset(set(scope.split(' '))):
+      if set(r).issubset(set(scopeList)):
 	ret.pyStatus = 200
 	ret.pyError = 'OK'
 	ret.pyErrorDescription = 'OK'
