@@ -1,4 +1,8 @@
-# mulesoft-oauth2-scope-enforcer
+# OBSOLETE
+
+We've stopped using Mulesoft quite a while ago. This code is **no longer maintained** and has dependencies that are flagged as having
+multiple CVE's. It is now archived for historical purposes. Use at your own risk.
+
 MuleSoft custom API gateway OAuth 2.0 scope enforcement policy
 
 ## Contents
